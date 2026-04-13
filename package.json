@@ -7,6 +7,7 @@
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
+    "start": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^10.8.0",
     "globals": "^17.5.0",
+    "nodemon": "^3.1.14",
     "prettier": "^3.8.2"
   }
 }
