@@ -5,6 +5,7 @@
 
 const jwt = require("jsonwebtoken");
 const User = require("../models/User.model");
+const config = require("../config");
 
 exports.protect = async (req, res, next) => {
   try {
@@ -16,7 +17,7 @@ exports.protect = async (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, config.jwt.secret);
 
     const user = await User.findById(decoded.id).select("-googleId");
     if (!user) {
@@ -24,9 +25,10 @@ exports.protect = async (req, res, next) => {
         .status(401)
         .json({ success: false, message: "Tài khoản không tồn tại." });
     }
+
     req.user = user;
     next();
-    // eslint-disable-next-line no-unused-vars
+    //eslint-disable-next-line no-unused-vars
   } catch (err) {
     return res
       .status(401)

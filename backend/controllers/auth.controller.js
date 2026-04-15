@@ -3,17 +3,13 @@
  */
 
 const jwt = require("jsonwebtoken");
+const config = require("../config");
 
-/**
- * Hàm tạo JWT token cho user
- * @param {Object} user - Mongoose User document
- * @returns {string} JWT token
- */
 function generateToken(user) {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" },
+    config.jwt.secret,
+    { expiresIn: config.jwt.expiresIn },
   );
 }
 
@@ -26,7 +22,7 @@ exports.googleCallback = (req, res) => {
     const token = generateToken(req.user);
     // Redirect về Vue SPA với token trong query string
     // Frontend sẽ đọc và lưu vào localStorage/Pinia store
-    const clientURL = process.env.CLIENT_URL || "http://localhost:5173";
+    const clientURL = config.app.clientUrl;
     res.redirect(`${clientURL}/auth/callback?token=${token}`);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

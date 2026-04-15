@@ -3,13 +3,13 @@
  * Stack: Node.js + Express + MongoDB + Socket.io + Passport (Google OAuth) + JWT
  */
 
-require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const passport = require("passport");
 const { Server } = require("socket.io");
+const config = require("./config");
 
 // ─── Import Routes ───────────────────────────────────────────────────────────
 const authRoutes = require("./routes/auth.routes");
@@ -29,7 +29,7 @@ const server = http.createServer(app);
 // ─── Socket.io Setup ──────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: config.app.clientUrl,
     methods: ["GET", "POST"],
   },
 });
@@ -67,7 +67,7 @@ io.on("connection", (socket) => {
 });
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173" }));
+app.use(cors({ origin: config.app.clientUrl }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(passport.initialize());
@@ -95,9 +95,8 @@ app.use((err, req, res, next) => {
 });
 
 // ─── Connect MongoDB & Start Server ──────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
-const MONGO_URI =
-  process.env.MONGO_URI || "mongodb://localhost:27017/happy_library";
+const PORT = config.app.port;
+const MONGO_URI = config.db.uri;
 
 mongoose
   .connect(MONGO_URI)
