@@ -263,7 +263,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useReaderStore } from "@/stores/reader.store";
-import AppModel from "@/components/common/AppModel.vue";
+import AppModel from "@/components/common/AppModal.vue";
 
 const readerStore = useReaderStore();
 const searchQuery = ref("");

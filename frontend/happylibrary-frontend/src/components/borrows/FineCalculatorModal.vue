@@ -1,6 +1,9 @@
 <template>
-  <AppModel
+  <AppModal
     title="Tính Tiền Phạt"
+    size="md"
+    submit-text="Xác nhận phạt"
+    cancel-text="Hủy"
     @close="$emit('close')"
     @submit="handleConfirm"
   >
@@ -52,12 +55,12 @@
         />
       </div>
     </div>
-  </AppModel>
+  </AppModal>
 </template>
 
 <script setup>
 import { ref, computed } from "vue";
-import AppModel from "@/components/common/AppModel.vue";
+import AppModal from "@/components/common/AppModal.vue";
 
 const props = defineProps({
   borrow: {

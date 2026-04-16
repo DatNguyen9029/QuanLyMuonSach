@@ -187,7 +187,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import AppModel from "@/components/common/AppModel.vue";
+import AppModel from "@/components/common/AppModal.vue";
 import { usePublisherStore } from "@/stores/publisher.store";
 
 const publisherStore = usePublisherStore();

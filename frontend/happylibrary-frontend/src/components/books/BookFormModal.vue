@@ -95,7 +95,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import api from "@/services/api";
-import AppModel from "@/components/common/AppModel.vue";
+import AppModel from "@/components/common/AppModal.vue";
 
 const props = defineProps({
   book: Object,

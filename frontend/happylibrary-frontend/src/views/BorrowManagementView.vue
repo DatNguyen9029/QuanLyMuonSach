@@ -184,19 +184,29 @@
               </td>
 
               <td v-if="isAdmin">
-                <div class="action-buttons">
+                <div class="table-actions">
                   <template v-if="borrow.backendStatus === 'ChoDuyet'">
                     <button
                       @click="approveBorrow(borrow)"
-                      class="action-btn action-btn--approve"
+                      class="icon-action-btn icon-action-btn--approve"
+                      title="Duyệt"
+                      aria-label="Duyệt"
                     >
-                      Duyệt
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m5 12 4 4L19 6" />
+                      </svg>
+                      <span class="action-tooltip">Duyệt</span>
                     </button>
                     <button
                       @click="openRejectModal(borrow)"
-                      class="action-btn action-btn--reject"
+                      class="icon-action-btn icon-action-btn--reject"
+                      title="Từ chối"
+                      aria-label="Từ chối"
                     >
-                      Từ chối
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m6 6 12 12M18 6 6 18" />
+                      </svg>
+                      <span class="action-tooltip">Từ chối</span>
                     </button>
                   </template>
 
@@ -208,21 +218,37 @@
                   >
                     <button
                       @click="openReturnModal(borrow)"
-                      class="action-btn action-btn--return"
+                      class="icon-action-btn icon-action-btn--return"
+                      title="Trả sách"
+                      aria-label="Trả sách"
                     >
-                      Trả sách
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 12h11m0 0-4-4m4 4-4 4" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M20 5v14" />
+                      </svg>
+                      <span class="action-tooltip">Trả sách</span>
                     </button>
                     <button
                       @click="openExtendModal(borrow)"
-                      class="action-btn action-btn--extend"
+                      class="icon-action-btn icon-action-btn--extend"
+                      title="Gia hạn"
+                      aria-label="Gia hạn"
                     >
-                      Gia hạn
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l3.5 2m5-2a8.5 8.5 0 1 1-3-6.5" />
+                      </svg>
+                      <span class="action-tooltip">Gia hạn</span>
                     </button>
                     <button
                       @click="openFineModal(borrow)"
-                      class="action-btn action-btn--ghost"
+                      class="icon-action-btn icon-action-btn--ghost"
+                      title="Tính phạt"
+                      aria-label="Tính phạt"
                     >
-                      Tính phạt
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.5h9m-9 4h5m-5 4h9M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+                      </svg>
+                      <span class="action-tooltip">Tính phạt</span>
                     </button>
                   </template>
 
@@ -234,9 +260,15 @@
 
                   <button
                     @click="viewDetail(borrow)"
-                    class="action-btn action-btn--ghost"
+                    class="icon-action-btn icon-action-btn--ghost"
+                    title="Chi tiết"
+                    aria-label="Chi tiết"
                   >
-                    Chi tiết
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <span class="action-tooltip">Chi tiết</span>
                   </button>
                 </div>
               </td>
@@ -244,9 +276,15 @@
               <td v-else>
                 <button
                   @click="viewDetail(borrow)"
-                  class="action-btn action-btn--ghost"
+                  class="icon-action-btn icon-action-btn--ghost"
+                  title="Chi tiết"
+                  aria-label="Chi tiết"
                 >
-                  Chi tiết
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <span class="action-tooltip">Chi tiết</span>
                 </button>
               </td>
             </tr>
@@ -1082,6 +1120,19 @@
       </Transition>
     </Teleport>
 
+    <!-- Fine Calculator Modal -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <FineCalculatorModal
+          v-if="showFineModal"
+          :borrow="selectedBorrow"
+          :fine-per-day="fineRatePerDay"
+          @close="showFineModal = false"
+          @confirm="handleFineConfirm"
+        />
+      </Transition>
+    </Teleport>
+
     <Transition name="toast">
       <div v-if="toast.show" class="toast" :class="`toast--${toast.type}`">
         <span>{{ toast.message }}</span>
@@ -1104,6 +1155,7 @@ import {
 import { useRouter } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { useBorrowStore } from "@/stores/borrow.store";
+import FineCalculatorModal from "@/components/borrows/FineCalculatorModal.vue";
 import api from "@/services/api";
 
 const PAGE_SIZE = 10;
@@ -1124,6 +1176,7 @@ const showDetailModal = ref(false);
 const showRejectModal = ref(false);
 const showReturnModal = ref(false);
 const showExtendModal = ref(false);
+const showFineModal = ref(false);
 const showNewBorrowModal = ref(false);
 
 const rejectReason = ref("");
@@ -1529,9 +1582,7 @@ function openExtendModal(borrow) {
 
 function openFineModal(borrow) {
   selectedBorrow.value = borrow;
-  returnForm.fineType = "late";
-  returnForm.note = "";
-  showReturnModal.value = true;
+  showFineModal.value = true;
 }
 
 function goToPage(page) {
@@ -1623,6 +1674,30 @@ async function confirmExtend() {
       error?.response?.data?.message ||
         error.message ||
         "Gia hạn phiếu thất bại.",
+      "error",
+    );
+  } finally {
+    isSubmitting.value = false;
+  }
+}
+
+async function handleFineConfirm(fineData) {
+  if (!fineData?.borrowId) return;
+  isSubmitting.value = true;
+  try {
+    showToast(
+      `Đã ghi nhận phạt ${formatCurrency(fineData.fine)} cho ${fineData.daysOverdue} ngày trễ.`,
+      "success",
+    );
+    showFineModal.value = false;
+    showDetailModal.value = false;
+    selectedBorrow.value = null;
+    await loadData();
+  } catch (error) {
+    showToast(
+      error?.response?.data?.message ||
+        error.message ||
+        "Tính phạt thất bại.",
       "error",
     );
   } finally {
@@ -1968,10 +2043,12 @@ defineExpose({
 
 <style scoped>
 .borrow-page {
-  max-width: 1400px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 .page-header {
@@ -1980,6 +2057,7 @@ defineExpose({
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  margin-bottom: 4px;
 }
 
 .page-title {
@@ -2002,43 +2080,72 @@ defineExpose({
 .action-btn {
   border: none;
   border-radius: 10px;
-  padding: 0.75rem 1rem;
+  padding: 0.75rem 1.25rem;
   cursor: pointer;
   font-weight: 600;
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .btn-primary {
   background: #d4a843;
   color: #fff;
 }
+.btn-primary:hover:not(:disabled) {
+  background: #c29838;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(212, 168, 67, 0.3);
+}
+
 .btn-outline {
   background: #f8f5ee;
   color: #7a5b12;
   border: 1px solid #ead9aa;
 }
+.btn-outline:hover:not(:disabled) {
+  background: #f0e8d8;
+  border-color: #d4a843;
+}
+
 .btn-ghost {
   background: #f4f2ee;
   color: #374151;
 }
+.btn-ghost:hover:not(:disabled) {
+  background: #e8e4dc;
+}
+
 .btn-danger {
   background: #dc2626;
   color: #fff;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+  transform: translateY(-1px);
 }
 
 .stats-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 14px;
+  gap: 20px;
+  margin-bottom: 8px;
 }
 
 .stat-card {
   background: white;
-  border-radius: 14px;
-  padding: 18px 20px;
+  border-radius: 16px;
+  padding: 20px 24px;
   display: flex;
   align-items: center;
   gap: 16px;
   border: 1px solid #e8e3db;
+  transition: all 0.2s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border-color: #d4a843;
 }
 
 .stat-icon :deep(svg) {
@@ -2058,8 +2165,9 @@ defineExpose({
 
 .tab-bar {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
 .tab-btn {
@@ -2068,42 +2176,79 @@ defineExpose({
   gap: 8px;
   border: 1px solid #e8e3db;
   background: white;
-  padding: 0.7rem 0.95rem;
+  padding: 0.7rem 1.1rem;
   border-radius: 999px;
   cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+}
+
+.tab-btn:hover:not(.tab-btn--active) {
+  background: #f9f7f4;
+  border-color: #d4a843;
+  transform: translateY(-1px);
 }
 
 .tab-btn--active {
   background: #1a1a2e;
   color: white;
+  border-color: #1a1a2e;
+}
+
+.tab-btn :deep(svg) {
+  width: 18px;
+  height: 18px;
 }
 
 .tab-count {
   background: #eef2ff;
   border-radius: 999px;
-  padding: 0.1rem 0.55rem;
-  font-size: 0.78rem;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  min-width: 24px;
+  text-align: center;
+}
+
+.tab-btn--active .tab-count {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
 }
 
 .toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .search-box {
   flex: 1;
   min-width: 280px;
+  max-width: 560px;
   position: relative;
   display: flex;
   align-items: center;
   background: white;
   border: 1px solid #e8e3db;
   border-radius: 12px;
-  padding: 0.8rem 0.95rem;
+  padding: 0.75rem 1rem;
   gap: 10px;
+  transition: all 0.2s ease;
+  height: 44px;
+}
+
+.search-box:focus-within {
+  border-color: #d4a843;
+  box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.1);
+}
+
+.search-box svg {
+  width: 20px;
+  height: 20px;
+  color: #9ca3af;
+  flex-shrink: 0;
 }
 
 .search-box input,
@@ -2114,6 +2259,11 @@ defineExpose({
   outline: none;
   background: transparent;
   font: inherit;
+  font-size: 0.9rem;
+}
+
+.search-box input::placeholder {
+  color: #9ca3af;
 }
 
 .search-clear {
@@ -2121,13 +2271,22 @@ defineExpose({
   background: transparent;
   cursor: pointer;
   color: #9ca3af;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.search-clear:hover {
+  background: #f3f4f6;
+  color: #374151;
 }
 
 .toolbar-filters {
   display: flex;
   gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
+  align-items: stretch;
+  flex-wrap: nowrap;
 }
 
 .filter-select {
@@ -2135,14 +2294,75 @@ defineExpose({
   background: white;
   border: 1px solid #e8e3db;
   border-radius: 12px;
-  padding: 0.8rem 0.95rem;
+  padding: 0 2.1rem 0 1rem;
+  height: 44px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.filter-select:hover {
+  border-color: #d4a843;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #d4a843;
+  box-shadow: 0 0 0 3px rgba(212, 168, 67, 0.1);
+}
+
+.toolbar .btn-outline {
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 1rem;
+}
+
+.btn-outline svg {
+  width: 16px;
+  height: 16px;
+  margin-right: 0;
+  flex-shrink: 0;
 }
 
 .table-card {
   background: white;
   border: 1px solid #e8e3db;
   border-radius: 16px;
-  padding: 16px;
+  padding: 24px;
+  min-height: 400px;
+}
+
+.table-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 0;
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+  border-radius: 6px;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .data-table {
@@ -2150,12 +2370,35 @@ defineExpose({
   border-collapse: collapse;
 }
 
-.data-table th,
+.data-table th {
+  padding: 16px 14px;
+  border-bottom: 2px solid #e8e3db;
+  text-align: left;
+  font-weight: 700;
+  color: #374151;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: #fafaf9;
+}
+
 .data-table td {
-  padding: 14px 12px;
+  padding: 16px 14px;
   border-bottom: 1px solid #f1ede7;
   text-align: left;
   vertical-align: top;
+}
+
+.table-row {
+  transition: background-color 0.2s ease;
+}
+
+.table-row:hover {
+  background: #fafaf9;
+}
+
+.table-row:last-child td {
+  border-bottom: none;
 }
 
 .borrow-id {
@@ -2191,37 +2434,203 @@ defineExpose({
   color: #6b7280;
 }
 
-.action-buttons {
+.table-actions {
   display: flex;
+  align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
-  gap: 8px;
+}
+
+.icon-action-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e8e3db;
+  border-radius: 999px;
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.18s ease;
+  color: #6b7280;
+}
+
+.icon-action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.icon-action-btn:hover:not(:disabled),
+.icon-action-btn:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.icon-action-btn:focus-visible {
+  outline: 2px solid rgba(212, 168, 67, 0.5);
+  outline-offset: 2px;
+}
+
+.icon-action-btn--approve {
+  background: #e9fbea;
+  color: #1f7a3d;
+  border-color: #bcecc9;
+}
+
+.icon-action-btn--approve:hover:not(:disabled),
+.icon-action-btn--approve:focus-visible {
+  background: #d6f5de;
+}
+
+.icon-action-btn--reject {
+  background: #fff1f2;
+  color: #be123c;
+  border-color: #fecdd3;
+}
+
+.icon-action-btn--reject:hover:not(:disabled),
+.icon-action-btn--reject:focus-visible {
+  background: #ffe4e6;
+}
+
+.icon-action-btn--return {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.icon-action-btn--return:hover:not(:disabled),
+.icon-action-btn--return:focus-visible {
+  background: #dbeafe;
+}
+
+.icon-action-btn--extend {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.icon-action-btn--extend:hover:not(:disabled),
+.icon-action-btn--extend:focus-visible {
+  background: #fef3c7;
+}
+
+.icon-action-btn--ghost {
+  background: #f8fafc;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+
+.icon-action-btn--ghost:hover:not(:disabled),
+.icon-action-btn--ghost:focus-visible {
+  background: #f1f5f9;
+}
+
+.icon-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.action-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  background: #111827;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.15s ease;
+  pointer-events: none;
+}
+
+.action-tooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translateX(-50%);
+  border-width: 4px;
+  border-style: solid;
+  border-color: #111827 transparent transparent transparent;
+}
+
+.icon-action-btn:hover .action-tooltip,
+.icon-action-btn:focus-visible .action-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.returned-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
 }
 
 .action-btn {
   background: #f4f2ee;
-  padding: 0.55rem 0.8rem;
+  padding: 0.55rem 0.9rem;
   border: 1px solid #e8e3db;
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .action-btn--approve {
   background: #dcfce7;
   color: #166534;
+  border-color: #bbf7d0;
 }
+.action-btn--approve:hover:not(:disabled) {
+  background: #bbf7d0;
+}
+
 .action-btn--reject {
   background: #fee2e2;
   color: #991b1b;
+  border-color: #fecaca;
 }
+.action-btn--reject:hover:not(:disabled) {
+  background: #fecaca;
+}
+
 .action-btn--return {
   background: #dbeafe;
   color: #1d4ed8;
+  border-color: #bfdbfe;
 }
+.action-btn--return:hover:not(:disabled) {
+  background: #bfdbfe;
+}
+
 .action-btn--extend {
   background: #fef3c7;
   color: #92400e;
+  border-color: #fde68a;
 }
+.action-btn--extend:hover:not(:disabled) {
+  background: #fde68a;
+}
+
 .action-btn--ghost {
   background: #f4f2ee;
   color: #374151;
+  border-color: #e8e3db;
+}
+.action-btn--ghost:hover:not(:disabled) {
+  background: #e8e4dc;
 }
 
 .status-badge {
@@ -2269,41 +2678,90 @@ defineExpose({
 }
 
 .empty-state {
-  padding: 50px 20px;
+  padding: 80px 20px;
   text-align: center;
   color: #6b7280;
+  background: #fafaf9;
+  border-radius: 12px;
+  margin: 20px 0;
 }
 
 .empty-state svg {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 12px;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  color: #9ca3af;
+}
+
+.empty-state p {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.empty-state span {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  display: block;
 }
 
 .pagination {
   display: flex;
   justify-content: center;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 24px;
   flex-wrap: wrap;
 }
 
 .page-btn {
-  min-width: 38px;
-  height: 38px;
+  min-width: 40px;
+  height: 40px;
   border-radius: 10px;
   border: 1px solid #e8e3db;
   background: white;
   cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-btn:hover:not(:disabled):not(.page-btn--ellipsis) {
+  border-color: #d4a843;
+  background: #fafaf9;
+  transform: translateY(-1px);
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .page-btn--active {
   background: #1a1a2e;
   color: white;
+  border-color: #1a1a2e;
+}
+
+.page-btn--active:hover {
+  background: #2a2a3e;
 }
 
 .page-btn--ellipsis {
   cursor: default;
+  border-color: transparent;
+}
+
+.page-btn--ellipsis:hover {
+  background: white;
+  transform: none;
 }
 
 .modal-backdrop {
@@ -2362,6 +2820,17 @@ defineExpose({
   gap: 10px;
   font-size: 1.1rem;
   font-weight: 800;
+}
+
+.modal-title svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.modal--return .modal-title {
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .modal-close {
@@ -2545,6 +3014,17 @@ defineExpose({
   margin-bottom: 14px;
 }
 
+.modal--return .fine-title {
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.modal--return .fine-title svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 .fine-type-selector {
   display: grid;
   gap: 10px;
@@ -2570,6 +3050,18 @@ defineExpose({
   margin-right: 4px;
 }
 
+.fine-option-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.fine-option-icon {
+  font-size: 0.9rem;
+  line-height: 1;
+  margin-right: 6px;
+}
+
 .fine-detail-box {
   background: #fff;
   border: 1px solid #edf0f4;
@@ -2589,6 +3081,15 @@ defineExpose({
   justify-content: space-between;
   gap: 10px;
   padding: 7px 0;
+  font-size: 0.9rem;
+}
+
+.fine-row-label {
+  color: #6b7280;
+}
+
+.fine-row-value {
+  font-weight: 600;
 }
 
 .fine-row--total {
@@ -2603,7 +3104,7 @@ defineExpose({
 }
 
 .total-amount {
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 800;
 }
 
@@ -2612,6 +3113,7 @@ defineExpose({
   color: white;
   border-radius: 14px;
   padding: 16px;
+  font-size: 0.92rem;
 }
 
 .summary-row {
@@ -2622,7 +3124,7 @@ defineExpose({
 }
 
 .summary-total {
-  font-size: 1.35rem;
+  font-size: 1.1rem;
   font-weight: 800;
 }
 
@@ -2673,6 +3175,12 @@ defineExpose({
   margin-top: 10px;
 }
 
+.detail-actions .action-btn {
+  padding: 0.5rem 0.82rem;
+  font-size: 0.82rem;
+  border-radius: 8px;
+}
+
 .loading-spinner {
   display: inline-block;
   width: 14px;
@@ -2685,27 +3193,36 @@ defineExpose({
 
 .toast {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
-  padding: 14px 18px;
+  right: 24px;
+  bottom: 24px;
+  padding: 16px 20px;
   border-radius: 12px;
   color: white;
   z-index: 10000;
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  font-weight: 600;
+  min-width: 280px;
+  max-width: 400px;
+  backdrop-filter: blur(8px);
 }
 
 .toast--success {
-  background: #16a34a;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
 }
 .toast--error {
-  background: #dc2626;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
 }
 .toast--info {
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
 }
 
 .row--overdue {
-  background: #fff7f7;
+  background: #fff1f2;
+  border-left: 3px solid #dc2626;
+}
+
+.row--overdue:hover {
+  background: #ffe4e6;
 }
 
 @keyframes spin {
@@ -2736,25 +3253,152 @@ defineExpose({
   .detail-grid {
     grid-template-columns: 1fr;
   }
+
+  .stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .table-card {
+    padding: 20px;
+  }
 }
 
 @media (max-width: 768px) {
+  .borrow-page {
+    padding: 16px;
+    gap: 20px;
+  }
+
+  .page-title {
+    font-size: 1.4rem;
+  }
+
+  .stats-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .tab-bar {
+    gap: 8px;
+  }
+
+  .tab-btn {
+    padding: 0.6rem 0.9rem;
+    font-size: 0.875rem;
+  }
+
   .toolbar {
+    flex-direction: column;
     align-items: stretch;
+    gap: 12px;
+  }
+
+  .search-box {
+    max-width: 100%;
+    min-width: 100%;
   }
 
   .toolbar-filters {
     width: 100%;
+    justify-content: stretch;
+    flex-wrap: nowrap;
   }
 
-  .search-box,
   .filter-select {
-    width: 100%;
+    flex: 1;
+  }
+
+  .btn-outline {
+    flex: 1;
+  }
+
+  .table-card {
+    padding: 16px;
+    border-radius: 12px;
   }
 
   .data-table {
     display: block;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .data-table thead,
+  .data-table tbody,
+  .data-table tr {
+    display: block;
+  }
+
+  .data-table thead {
+    display: none;
+  }
+
+  .data-table tr {
+    margin-bottom: 16px;
+    border: 1px solid #e8e3db;
+    border-radius: 12px;
+    padding: 12px;
+    background: white;
+  }
+
+  .data-table td {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #f1ede7;
+  }
+
+  .data-table td:last-child {
+    border-bottom: none;
+  }
+
+  .data-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: #6b7280;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .table-actions {
+    width: auto;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .modal {
+    width: 100%;
+    margin: 0 12px;
+  }
+
+  .modal-body {
+    max-height: 60vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .borrow-page {
+    padding: 12px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .btn-primary {
+    width: 100%;
+  }
+
+  .pagination {
+    gap: 4px;
+  }
+
+  .page-btn {
+    min-width: 32px;
+    height: 32px;
+    font-size: 0.875rem;
   }
 }
 </style>

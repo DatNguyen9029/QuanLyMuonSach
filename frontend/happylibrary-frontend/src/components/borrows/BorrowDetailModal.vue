@@ -1,5 +1,10 @@
 <template>
-  <AppModel title="Chi tiết Mượn Sách" @close="$emit('close')">
+  <AppModal
+    title="Chi tiết Mượn Sách"
+    size="lg"
+    :show-footer="false"
+    @close="$emit('close')"
+  >
     <div class="space-y-4">
       <div>
         <label class="form-label">Sách</label>
@@ -140,11 +145,11 @@
         </div>
       </div>
     </div>
-  </AppModel>
+  </AppModal>
 </template>
 
 <script setup>
-import AppModel from "@/components/common/AppModel.vue";
+import AppModal from "@/components/common/AppModal.vue";
 
 defineProps({
   borrow: {
