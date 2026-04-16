@@ -27,6 +27,9 @@ export const useBorrowStore = defineStore("borrow", () => {
   };
 
   function normalizeBorrow(record) {
+    const user = record.user && typeof record.user === "object" ? record.user : null;
+    const book = record.book && typeof record.book === "object" ? record.book : null;
+
     return {
       _id: record._id,
       borrowCode: record._id?.slice(-6)?.toUpperCase() || "------",
@@ -37,21 +40,23 @@ export const useBorrowStore = defineStore("borrow", () => {
       returnedDate: record.ngayTraThucTe,
       fineAmount: record.tienPhat || record.tienPhatTamTinh || 0,
       rejectReason: record.lyDoTuChoi || "",
-      reader: record.user
+      note: record.ghiChu || "",
+      reader: user
         ? {
-            id: record.user._id,
-            name: record.user.hoTen,
-            email: record.user.email,
-            phone: record.user.dienThoai,
+            id: user._id,
+            name: user.hoTen,
+            email: user.email,
+            phone: user.dienThoai,
           }
         : null,
-      book: record.book
+      book: book
         ? {
-            id: record.book._id,
-            title: record.book.tenSach,
-            author: record.book.tacGia,
-            image: record.book.hinhAnh,
-            price: record.book.donGia || 0,
+            id: book._id,
+            title: book.tenSach,
+            author: book.tacGia,
+            image: book.hinhAnh,
+            price: book.donGia || 0,
+            stock: book.soLuongTienTai ?? 0,
           }
         : null,
     };
@@ -73,12 +78,21 @@ export const useBorrowStore = defineStore("borrow", () => {
   async function fetchBorrows(params = {}) {
     isLoading.value = true;
     try {
-      const { data } = await api.get("/borrows", { params });
+      const requestParams = { ...params };
+      if (requestParams.status && !requestParams.trangThai) {
+        requestParams.trangThai = statusMap[requestParams.status] || requestParams.status;
+        delete requestParams.status;
+      }
+
+      const { data } = await api.get("/borrows", { params: requestParams });
       borrows.value = (data.data || []).map(normalizeBorrow);
       pagination.value = data.pagination || {
-        page: 1,
-        totalPages: 1,
-        total: 0,
+        page: data.page || 1,
+        totalPages: Math.max(
+          1,
+          Math.ceil((data.total || 0) / (data.limit || requestParams.limit || 10)),
+        ),
+        total: data.total || 0,
       };
       return data;
     } catch (err) {
@@ -110,7 +124,18 @@ export const useBorrowStore = defineStore("borrow", () => {
     const { data } = await api.get("/borrows", {
       params: { trangThai: "ChoDuyet", limit: 1 },
     });
-    pendingCount.value = data.total || 0;
+    pendingCount.value = data.pagination?.total || data.total || 0;
+  }
+
+  async function createAdminBorrow(payload) {
+    const { data } = await api.post("/borrows/admin", payload);
+    const createdBorrows = (data.data || []).map(normalizeBorrow);
+    borrows.value = [...createdBorrows, ...borrows.value];
+    pagination.value = {
+      ...pagination.value,
+      total: (pagination.value.total || 0) + createdBorrows.length,
+    };
+    return createdBorrows;
   }
 
   /**
@@ -177,6 +202,7 @@ export const useBorrowStore = defineStore("borrow", () => {
     // actions
     fetchBorrows,
     fetchPendingCount,
+    createAdminBorrow,
     approveBorrow,
     rejectBorrow,
     returnBook,

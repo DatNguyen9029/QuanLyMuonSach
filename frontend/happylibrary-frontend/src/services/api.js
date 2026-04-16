@@ -28,12 +28,20 @@ function getCacheKey(config) {
   return config.url + "?" + params;
 }
 
+function clearGetCache() {
+  cache.clear();
+}
+
 // ── REQUEST INTERCEPTOR: Đính kèm JWT token + Cache check ──────────────────
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("hl_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    if ((config.method || "get").toLowerCase() !== "get") {
+      clearGetCache();
     }
 
     // Check cache for GET requests (5min TTL)
@@ -53,6 +61,11 @@ api.interceptors.request.use(
 // ── RESPONSE INTERCEPTOR: Cache GET + Error handling ─────────────────────
 api.interceptors.response.use(
   (response) => {
+    if ((response.config.method || "get").toLowerCase() !== "get") {
+      clearGetCache();
+      return response;
+    }
+
     const cacheKey = getCacheKey(response.config);
     if (cacheKey) {
       cache.set(cacheKey, { response, timestamp: Date.now() });
@@ -60,16 +73,16 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Lấy thông báo lỗi từ Server nếu có, nếu không thì dùng mặc định
-    const serverMessage = error.response?.data?.message;
     const status = error.response?.status;
+    // Lấy message từ server trả về (ví dụ: res.status(409).json({message: '...'}))
+    const serverMessage = error.response?.data?.message;
 
     if (status === 401) {
       localStorage.removeItem("hl_token");
-      window.location.href = "/login";
+      window.location.href = "/auth/login";
     }
 
-    // Quan trọng: Trả về message cụ thể để Store có thể bắt được
+    // Thay vì throw Error("Đã có lỗi xảy ra"), hãy ưu tiên message từ server
     const finalError = new Error(serverMessage || "Đã có lỗi xảy ra");
     finalError.status = status;
 

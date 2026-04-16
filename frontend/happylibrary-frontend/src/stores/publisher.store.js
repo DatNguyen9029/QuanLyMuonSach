@@ -26,8 +26,10 @@ export const usePublisherStore = defineStore("publisher", () => {
       const { data } = await api.get("/publishers");
       publishers.value = (data.data || []).map(normalizePublisher);
     } catch (err) {
+      // Nếu database đã cập nhật nhưng API trả về lỗi (do logic sync cũ)
+      // chúng ta vẫn log lỗi nhưng không nên làm treo ứng dụng
+      console.warn("Lưu ý: Có vấn đề khi tải NXB:", err.message);
       error.value = err.message;
-      throw err;
     } finally {
       isLoading.value = false;
     }
@@ -55,7 +57,9 @@ export const usePublisherStore = defineStore("publisher", () => {
     try {
       const { data } = await api.put(`/publishers/${publisherId}`, payload);
       const normalized = normalizePublisher(data.data);
-      const index = publishers.value.findIndex((item) => item._id === publisherId);
+      const index = publishers.value.findIndex(
+        (item) => item._id === publisherId,
+      );
       if (index > -1) {
         publishers.value[index] = {
           ...publishers.value[index],
@@ -76,7 +80,9 @@ export const usePublisherStore = defineStore("publisher", () => {
     error.value = null;
     try {
       await api.delete(`/publishers/${publisherId}`);
-      publishers.value = publishers.value.filter((item) => item._id !== publisherId);
+      publishers.value = publishers.value.filter(
+        (item) => item._id !== publisherId,
+      );
     } catch (err) {
       error.value = err.message;
       throw err;

@@ -6,6 +6,7 @@ const { protect, adminOnly } = require("../middleware/auth.middleware");
 
 borrowRouter.get("/my", protect, borrowCtrl.getMyBorrows); // User: lịch sử của mình
 borrowRouter.post("/", protect, borrowCtrl.createBorrowRequest); // User: tạo yêu cầu mượn
+borrowRouter.post("/admin", protect, adminOnly, borrowCtrl.createBorrowByAdmin);
 borrowRouter.get("/", protect, adminOnly, borrowCtrl.getAllBorrows); // Admin: xem tất cả
 borrowRouter.get("/:id", protect, borrowCtrl.getBorrowDetail); // User/Admin: chi tiết
 borrowRouter.patch(

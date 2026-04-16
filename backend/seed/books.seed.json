@@ -1,0 +1,92 @@
+[
+  {
+    "tenSach": "Đắc Nhân Tâm",
+    "donGia": 86000,
+    "soLuongTienTai": 15,
+    "namXuatBan": 2021,
+    "tenNXB": "NXB Tổng Hợp TP.HCM",
+    "tacGia": "Dale Carnegie",
+    "hinhAnh": "https://example.com/dac-nhan-tam.jpg"
+  },
+  {
+    "tenSach": "Doraemon - Tập 1",
+    "donGia": 25000,
+    "soLuongTienTai": 30,
+    "namXuatBan": 2023,
+    "tenNXB": "NXB Kim Đồng",
+    "tacGia": "Fujiko F. Fujio",
+    "hinhAnh": "https://example.com/doraemon-1.jpg"
+  },
+  {
+    "tenSach": "Nhà Giả Kim",
+    "donGia": 79000,
+    "soLuongTienTai": 10,
+    "namXuatBan": 2020,
+    "tenNXB": "NXB Kim Đồng",
+    "tacGia": "Paulo Coelho",
+    "hinhAnh": "https://example.com/nha-gia-kim.jpg"
+  },
+  {
+    "tenSach": "Cho Tôi Xin Một Vé Đi Tuổi Thơ",
+    "donGia": 95000,
+    "soLuongTienTai": 20,
+    "namXuatBan": 2022,
+    "tenNXB": "NXB Trẻ",
+    "tacGia": "Nguyễn Nhật Ánh",
+    "hinhAnh": "https://example.com/ve-di-tuoi-tho.jpg"
+  },
+  {
+    "tenSach": "Toán Học Lớp 12",
+    "donGia": 15000,
+    "soLuongTienTai": 100,
+    "namXuatBan": 2024,
+    "tenNXB": "NXB Giáo Dục",
+    "tacGia": "Nhiều tác giả",
+    "hinhAnh": "https://example.com/toan-12.jpg"
+  },
+  {
+    "tenSach": "Lược Sử Thời Gian",
+    "donGia": 125000,
+    "soLuongTienTai": 5,
+    "namXuatBan": 2019,
+    "tenNXB": "NXB Trẻ",
+    "tacGia": "Stephen Hawking",
+    "hinhAnh": "https://example.com/luoc-su-thoi-gian.jpg"
+  },
+  {
+    "tenSach": "Súng, Vi Trùng Và Thép",
+    "donGia": 180000,
+    "soLuongTienTai": 8,
+    "namXuatBan": 2021,
+    "tenNXB": "NXB Tổng Hợp TP.HCM",
+    "tacGia": "Jared Diamond",
+    "hinhAnh": "https://example.com/sung-vi-trung-thep.jpg"
+  },
+  {
+    "tenSach": "Thám Tử Lừng Danh Conan - Tập 100",
+    "donGia": 30000,
+    "soLuongTienTai": 50,
+    "namXuatBan": 2023,
+    "tenNXB": "NXB Kim Đồng",
+    "tacGia": "Gosho Aoyama",
+    "hinhAnh": "https://example.com/conan-100.jpg"
+  },
+  {
+    "tenSach": "Kiên Quyết, Kiên Trì Đấu Tranh Phòng, Chống Tham Nhũng",
+    "donGia": 250000,
+    "soLuongTienTai": 12,
+    "namXuatBan": 2023,
+    "tenNXB": "NXB Chính Trị Quốc Gia Sự Thật",
+    "tacGia": "Nguyễn Phú Trọng",
+    "hinhAnh": "https://example.com/phong-chong-tham-nhung.jpg"
+  },
+  {
+    "tenSach": "Cơ Thể Tự Chữa Lành",
+    "donGia": 145000,
+    "soLuongTienTai": 15,
+    "namXuatBan": 2022,
+    "tenNXB": "NXB Tổng Hợp TP.HCM",
+    "tacGia": "Anthony William",
+    "hinhAnh": "https://example.com/co-the-tu-chua-lanh.jpg"
+  }
+]

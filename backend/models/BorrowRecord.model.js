@@ -45,6 +45,11 @@ const borrowRecordSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    ghiChu: {
+      type: String,
+      trim: true,
+      default: "",
+    },
   },
   { timestamps: true },
 );

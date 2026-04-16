@@ -11,10 +11,17 @@
 
 const BorrowRecord = require("../models/BorrowRecord.model");
 const Book = require("../models/Book.model");
+const User = require("../models/User.model");
+const Notification = require("../models/Notification.model");
 
 // ─── Hằng số nghiệp vụ ────────────────────────────────────────────────────────
 const MAX_BORROW_LIMIT = 3; // Số sách tối đa được mượn cùng lúc
 const FINE_PER_DAY = 10000; // Tiền phạt mỗi ngày trễ: 10.000 VND
+
+const BORROW_POPULATE = [
+  { path: "user", select: "hoTen email dienThoai" },
+  { path: "book", select: "tenSach tacGia hinhAnh donGia soLuongTienTai" },
+];
 
 /**
  * Hàm tiện ích: Tính tiền phạt cho một BorrowRecord
@@ -64,6 +71,26 @@ function tinhTienPhat(record) {
   return 0; // Không phạt
 }
 
+function gopSachTrung(items = []) {
+  const grouped = new Map();
+
+  for (const item of items) {
+    const bookId = item.bookId?.trim();
+    const quantity = Number(item.quantity || 0);
+
+    if (!bookId || !Number.isInteger(quantity) || quantity <= 0) {
+      continue;
+    }
+
+    grouped.set(bookId, (grouped.get(bookId) || 0) + quantity);
+  }
+
+  return Array.from(grouped.entries()).map(([bookId, quantity]) => ({
+    bookId,
+    quantity,
+  }));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // [USER] POST /api/borrows - Tạo yêu cầu mượn sách
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,9 +136,9 @@ exports.createBorrowRequest = async (req, res) => {
       ngayHenTra: new Date(ngayHenTra),
       trangThai: "ChoDuyet",
     });
+    await record.populate(BORROW_POPULATE);
 
     // ── NEW: Notification khi tạo yêu cầu mượn (cho admin) ───────────────
-    const Notification = require("../models/Notification.model");
     const io = req.app.get("io");
 
     const adminNotif = new Notification({
@@ -133,6 +160,186 @@ exports.createBorrowRequest = async (req, res) => {
 
     return res.status(201).json({ success: true, data: record });
   } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [ADMIN] POST /api/borrows/admin - Tạo phiếu mượn trực tiếp cho bạn đọc
+// ─────────────────────────────────────────────────────────────────────────────
+exports.createBorrowByAdmin = async (req, res) => {
+  let createdRecords = [];
+  let stockAdjustedItems = [];
+
+  try {
+    const { userId, ngayMuon, ngayHenTra, ghiChu = "", items = [] } = req.body;
+    const groupedItems = gopSachTrung(items);
+
+    if (!userId || !ngayMuon || !ngayHenTra || groupedItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Bạn đọc, ngày mượn, ngày hẹn trả và danh sách sách là bắt buộc.",
+      });
+    }
+
+    const borrowDate = new Date(ngayMuon);
+    const dueDate = new Date(ngayHenTra);
+
+    if (Number.isNaN(borrowDate.getTime()) || Number.isNaN(dueDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Ngày mượn hoặc ngày hẹn trả không hợp lệ.",
+      });
+    }
+
+    if (dueDate < borrowDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Ngày hẹn trả phải lớn hơn hoặc bằng ngày mượn.",
+      });
+    }
+
+    const reader = await User.findById(userId).select("hoTen role");
+    if (!reader) {
+      return res.status(404).json({
+        success: false,
+        message: "Bạn đọc không tồn tại.",
+      });
+    }
+
+    if (reader.role !== "user") {
+      return res.status(400).json({
+        success: false,
+        message: "Chỉ có thể tạo phiếu mượn cho tài khoản bạn đọc.",
+      });
+    }
+
+    const tongSoLuong = groupedItems.reduce((sum, item) => sum + item.quantity, 0);
+    const dangMuon = await BorrowRecord.countDocuments({
+      user: userId,
+      trangThai: { $in: ["ChoDuyet", "DangMuon"] },
+    });
+
+    if (dangMuon + tongSoLuong > MAX_BORROW_LIMIT) {
+      return res.status(400).json({
+        success: false,
+        message: `Bạn đọc hiện đã có ${dangMuon} sách đang mượn/chờ duyệt. Tối đa chỉ được ${MAX_BORROW_LIMIT} cuốn cùng lúc.`,
+      });
+    }
+
+    const bookIds = groupedItems.map((item) => item.bookId);
+    const books = await Book.find({ _id: { $in: bookIds } }).select(
+      "tenSach soLuongTienTai",
+    );
+
+    if (books.length !== bookIds.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Có sách trong danh sách không tồn tại.",
+      });
+    }
+
+    const bookMap = new Map(books.map((book) => [String(book._id), book]));
+    for (const item of groupedItems) {
+      const book = bookMap.get(item.bookId);
+      if (!book || book.soLuongTienTai < item.quantity) {
+        return res.status(400).json({
+          success: false,
+          message: `Sách "${book?.tenSach || "không xác định"}" không đủ số lượng tồn.`,
+        });
+      }
+    }
+
+    const payloads = groupedItems.flatMap((item) =>
+      Array.from({ length: item.quantity }, () => ({
+        user: userId,
+        book: item.bookId,
+        ngayMuon: borrowDate,
+        ngayHenTra: dueDate,
+        trangThai: "DangMuon",
+        ghiChu: String(ghiChu || "").trim(),
+      })),
+    );
+
+    for (const item of groupedItems) {
+      const updatedBook = await Book.findOneAndUpdate(
+        {
+          _id: item.bookId,
+          soLuongTienTai: { $gte: item.quantity },
+        },
+        { $inc: { soLuongTienTai: -item.quantity } },
+        { new: true },
+      );
+
+      if (!updatedBook) {
+        if (stockAdjustedItems.length > 0) {
+          await Book.bulkWrite(
+            stockAdjustedItems.map((adjustedItem) => ({
+              updateOne: {
+                filter: { _id: adjustedItem.bookId },
+                update: { $inc: { soLuongTienTai: adjustedItem.quantity } },
+              },
+            })),
+          );
+        }
+
+        return res.status(400).json({
+          success: false,
+          message: "Một hoặc nhiều sách không còn đủ số lượng để tạo phiếu mượn.",
+        });
+      }
+
+      stockAdjustedItems.push(item);
+    }
+
+    createdRecords = await BorrowRecord.insertMany(payloads);
+
+    const populatedRecords = await BorrowRecord.find({
+      _id: { $in: createdRecords.map((record) => record._id) },
+    })
+      .populate(BORROW_POPULATE)
+      .sort({ createdAt: -1 });
+
+    const io = req.app.get("io");
+    const userNotif = new Notification({
+      user: userId,
+      title: "Phiếu mượn mới đã được tạo",
+      message: `Bạn có ${populatedRecords.length} sách vừa được ghi nhận mượn.`,
+      type: "borrow_update",
+      relatedId: populatedRecords[0]?._id || null,
+      relatedType: "borrow",
+      data: { createdCount: populatedRecords.length, trangThai: "DangMuon" },
+    });
+    await userNotif.save();
+    io.to(`user_${userId}`).emit("newNotification", userNotif);
+    io.emit("adminBorrowUpdated", {
+      recordIds: populatedRecords.map((record) => record._id),
+      trangThai: "DangMuon",
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: populatedRecords,
+      totalCreated: populatedRecords.length,
+    });
+  } catch (err) {
+    if (createdRecords.length > 0) {
+      await BorrowRecord.deleteMany({
+        _id: { $in: createdRecords.map((record) => record._id) },
+      });
+    }
+
+    if (stockAdjustedItems.length > 0) {
+      await Book.bulkWrite(
+        stockAdjustedItems.map((item) => ({
+          updateOne: {
+            filter: { _id: item.bookId },
+            update: { $inc: { soLuongTienTai: item.quantity } },
+          },
+        })),
+      );
+    }
+
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -227,9 +434,9 @@ exports.updateBorrowStatus = async (req, res) => {
 
     record.trangThai = trangThai;
     await record.save();
+    await record.populate(BORROW_POPULATE);
 
     // ── NEW: Tạo & Emit Notification ─────────────────────────────────────
-    const Notification = require("../models/Notification.model");
     const io = req.app.get("io");
 
     // Notification cho user
@@ -372,19 +579,19 @@ exports.getBorrowDetail = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getAllBorrows = async (req, res) => {
   try {
-    const { trangThai, userId, page = 1, limit = 10 } = req.query;
+    const { trangThai, status, userId, page = 1, limit = 10 } = req.query;
     const filter = {};
-    if (trangThai) filter.trangThai = trangThai;
+    if (trangThai || status) filter.trangThai = trangThai || status;
     if (userId) filter.user = userId;
 
     const records = await BorrowRecord.find(filter)
-      .populate("user", "hoTen email")
-      .populate("book", "tenSach tacGia hinhAnh donGia")
+      .populate("user", "hoTen email dienThoai")
+      .populate("book", "tenSach tacGia hinhAnh donGia soLuongTienTai")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));
-
     const total = await BorrowRecord.countDocuments(filter);
+    const totalPages = Math.max(1, Math.ceil(total / Number(limit || 10)));
 
     return res.json({
       success: true,
@@ -392,6 +599,12 @@ exports.getAllBorrows = async (req, res) => {
       total,
       page: Number(page),
       limit: Number(limit),
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        totalPages,
+      },
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });

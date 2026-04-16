@@ -153,7 +153,7 @@
           </thead>
           <tbody>
             <tr
-              v-for="borrow in filteredBorrows"
+              v-for="borrow in paginatedBorrows"
               :key="borrow._id"
               class="table-row"
               :class="{ 'row--overdue': isOverdue(borrow) }"
@@ -383,6 +383,320 @@
         </button>
       </div>
     </div>
+
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="showNewBorrowModal"
+          class="modal-backdrop"
+          @click.self="closeNewBorrowModal"
+        >
+          <div class="modal modal--lg">
+            <div class="modal-header">
+              <h2 class="modal-title">Thêm mới phiếu mượn</h2>
+              <button @click="closeNewBorrowModal" class="modal-close">✕</button>
+            </div>
+
+            <div class="modal-body">
+              <div class="borrow-form-grid">
+                <div class="form-group">
+                  <label class="input-label"
+                    >Bạn đọc <span class="required">*</span></label
+                  >
+                  <select
+                    v-model="newBorrowForm.userId"
+                    class="input-field"
+                    :class="{ 'input-field--error': createBorrowErrors.userId }"
+                    :disabled="isReferenceLoading || isSubmitting"
+                  >
+                    <option value="">-- Chọn --</option>
+                    <option
+                      v-for="reader in availableReaders"
+                      :key="reader._id"
+                      :value="reader._id"
+                    >
+                      {{ reader.hoTen }} - {{ reader.email }}
+                    </option>
+                  </select>
+                  <span v-if="createBorrowErrors.userId" class="form-error">{{
+                    createBorrowErrors.userId
+                  }}</span>
+                  <p
+                    v-if="newBorrowForm.userId"
+                    class="helper-text"
+                  >
+                    Độc giả này hiện có
+                    <strong>{{
+                      getReaderActiveBorrowCount(newBorrowForm.userId)
+                    }}</strong>
+                    sách chờ duyệt/đang mượn.
+                  </p>
+                </div>
+
+                <div class="form-group">
+                  <label class="input-label"
+                    >Ngày mượn <span class="required">*</span></label
+                  >
+                  <input
+                    v-model="newBorrowForm.borrowDate"
+                    type="date"
+                    class="input-field"
+                    :class="{
+                      'input-field--error': createBorrowErrors.borrowDate,
+                    }"
+                    :disabled="isSubmitting"
+                  />
+                  <span
+                    v-if="createBorrowErrors.borrowDate"
+                    class="form-error"
+                    >{{ createBorrowErrors.borrowDate }}</span
+                  >
+                </div>
+
+                <div class="form-group">
+                  <label class="input-label"
+                    >Ngày hẹn trả <span class="required">*</span></label
+                  >
+                  <input
+                    v-model="newBorrowForm.dueDate"
+                    type="date"
+                    class="input-field"
+                    :class="{ 'input-field--error': createBorrowErrors.dueDate }"
+                    :disabled="isSubmitting"
+                  />
+                  <span v-if="createBorrowErrors.dueDate" class="form-error">{{
+                    createBorrowErrors.dueDate
+                  }}</span>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="input-label">Ghi chú</label>
+                <textarea
+                  v-model="newBorrowForm.note"
+                  class="input-field"
+                  rows="4"
+                  placeholder="Nhập ghi chú thêm cho phiếu mượn..."
+                  :disabled="isSubmitting"
+                ></textarea>
+              </div>
+
+              <div class="borrow-lines">
+                <table class="borrow-create-table">
+                  <thead>
+                    <tr>
+                      <th>Nhan đề <span class="required">*</span></th>
+                      <th>Thông tin sách</th>
+                      <th>Số lượng mượn <span class="required">*</span></th>
+                      <th>Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="(item, index) in newBorrowForm.items"
+                      :key="item.id"
+                    >
+                      <td>
+                        <select
+                          v-model="item.bookId"
+                          class="input-field input-field--compact"
+                          :class="{
+                            'input-field--error': getBorrowItemError(
+                              index,
+                              'bookId',
+                            ),
+                          }"
+                          :disabled="isReferenceLoading || isSubmitting"
+                          @change="normalizeBorrowItemQuantity(item)"
+                        >
+                          <option value="">-- Chọn --</option>
+                          <option
+                            v-for="book in availableBooks"
+                            :key="book._id"
+                            :value="book._id"
+                            :disabled="isBookOptionDisabled(book._id, item.id)"
+                          >
+                            {{ book.tenSach }}
+                          </option>
+                        </select>
+                        <span
+                          v-if="getBorrowItemError(index, 'bookId')"
+                          class="form-error"
+                          >{{ getBorrowItemError(index, "bookId") }}</span
+                        >
+                      </td>
+                      <td>
+                        <div v-if="getBookById(item.bookId)" class="book-meta">
+                          <p class="book-meta__title">
+                            {{ getBookById(item.bookId)?.tenSach }}
+                          </p>
+                          <p class="book-meta__line">
+                            Tác giả:
+                            {{ getBookById(item.bookId)?.tacGia || "Đang cập nhật" }}
+                          </p>
+                          <p class="book-meta__line">
+                            Tồn kho: {{ getBorrowLineStock(item) }} bản
+                          </p>
+                          <p class="book-meta__line">
+                            Giá sách:
+                            {{ formatCurrency(getBookById(item.bookId)?.donGia) }}
+                          </p>
+                        </div>
+                        <span v-else class="table-placeholder"
+                          >Chọn sách để xem thông tin</span
+                        >
+                      </td>
+                      <td>
+                        <input
+                          v-model.number="item.quantity"
+                          type="number"
+                          min="1"
+                          :max="getBorrowLineStock(item) || 1"
+                          class="input-field input-field--compact"
+                          :class="{
+                            'input-field--error': getBorrowItemError(
+                              index,
+                              'quantity',
+                            ),
+                          }"
+                          :disabled="isSubmitting"
+                          @blur="normalizeBorrowItemQuantity(item)"
+                        />
+                        <span
+                          v-if="getBorrowItemError(index, 'quantity')"
+                          class="form-error"
+                          >{{ getBorrowItemError(index, "quantity") }}</span
+                        >
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          class="row-action-btn"
+                          :disabled="isSubmitting"
+                          @click="removeBorrowItem(item.id)"
+                        >
+                          🗑
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <button
+                type="button"
+                class="btn-outline"
+                :disabled="isSubmitting"
+                @click="addBorrowItem"
+              >
+                +
+                Thêm
+              </button>
+
+              <p v-if="createBorrowErrors.itemsGeneral" class="form-error">
+                {{ createBorrowErrors.itemsGeneral }}
+              </p>
+
+              <label class="inline-check">
+                <input v-model="newBorrowForm.saveAndContinue" type="checkbox" />
+                <span>Lưu và thêm tiếp</span>
+              </label>
+            </div>
+
+            <div class="modal-footer">
+              <button @click="closeNewBorrowModal" class="btn-ghost">
+                Hủy bỏ
+              </button>
+              <button
+                @click="submitNewBorrow"
+                class="btn-primary"
+                :disabled="isSubmitting || isReferenceLoading"
+              >
+                <span v-if="isSubmitting" class="loading-spinner"></span>
+                {{ isSubmitting ? "Đang lưu..." : "Lưu" }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="showDetailModal"
+          class="modal-backdrop"
+          @click.self="showDetailModal = false"
+        >
+          <div class="modal modal--detail">
+            <div class="modal-header">
+              <h2 class="modal-title">Chi tiết phiếu mượn</h2>
+              <button @click="showDetailModal = false" class="modal-close">
+                ✕
+              </button>
+            </div>
+            <div class="modal-body" v-if="selectedBorrow">
+              <div class="detail-grid">
+                <div class="detail-card">
+                  <span class="detail-label">Mã phiếu</span>
+                  <strong>#{{ selectedBorrow.borrowCode }}</strong>
+                </div>
+                <div class="detail-card">
+                  <span class="detail-label">Trạng thái</span>
+                  <strong>{{ getStatusLabel(selectedBorrow.status) }}</strong>
+                </div>
+                <div class="detail-card">
+                  <span class="detail-label">Bạn đọc</span>
+                  <strong>{{ selectedBorrow.reader?.name || "—" }}</strong>
+                  <small>{{ selectedBorrow.reader?.email || "—" }}</small>
+                </div>
+                <div class="detail-card">
+                  <span class="detail-label">Sách</span>
+                  <strong>{{ selectedBorrow.book?.title || "—" }}</strong>
+                  <small>{{ selectedBorrow.book?.author || "—" }}</small>
+                </div>
+                <div class="detail-card">
+                  <span class="detail-label">Ngày mượn</span>
+                  <strong>{{ formatDate(selectedBorrow.borrowDate) }}</strong>
+                </div>
+                <div class="detail-card">
+                  <span class="detail-label">Ngày hẹn trả</span>
+                  <strong>{{ formatDate(selectedBorrow.dueDate) }}</strong>
+                </div>
+                <div class="detail-card" v-if="selectedBorrow.returnedDate">
+                  <span class="detail-label">Ngày trả thực tế</span>
+                  <strong>{{ formatDate(selectedBorrow.returnedDate) }}</strong>
+                </div>
+                <div class="detail-card" v-if="selectedBorrow.fineAmount > 0">
+                  <span class="detail-label">Tiền phạt</span>
+                  <strong>{{ formatCurrency(selectedBorrow.fineAmount) }}</strong>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="input-label">Ghi chú</label>
+                <textarea
+                  class="input-field"
+                  rows="3"
+                  :value="selectedBorrow.note || 'Không có ghi chú'"
+                  readonly
+                ></textarea>
+              </div>
+
+              <div class="form-group" v-if="selectedBorrow.rejectReason">
+                <label class="input-label">Lý do từ chối</label>
+                <textarea
+                  class="input-field"
+                  rows="3"
+                  :value="selectedBorrow.rejectReason"
+                  readonly
+                ></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- ══════════════════════════════════════════════════════════════════ -->
     <!-- MODAL: XÁC NHẬN TRẢ SÁCH + TÍNH TIỀN PHẠT                       -->
@@ -778,6 +1092,8 @@
 <script setup>
 import { ref, computed, onMounted, watch } from "vue";
 import { useBorrowStore } from "@/stores/borrow.store";
+import { useReaderStore } from "@/stores/reader.store";
+import { useBookStore } from "@/stores/book.store";
 import { storeToRefs } from "pinia";
 
 // ─── STATUS BADGE COMPONENT (inline) ─────────────────────────────────────────
@@ -803,7 +1119,19 @@ const StatusBadge = {
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
 const borrowStore = useBorrowStore();
-const { borrows, isLoading, pagination } = storeToRefs(borrowStore);
+const readerStore = useReaderStore();
+const bookStore = useBookStore();
+
+const borrowRefs = storeToRefs(borrowStore);
+const readerRefs = storeToRefs(readerStore);
+const bookRefs = storeToRefs(bookStore);
+
+const borrows = borrowRefs.borrows;
+const isLoading = borrowRefs.isLoading;
+const readers = readerRefs.readers;
+const readerLoading = readerRefs.isLoading;
+const books = bookRefs.books;
+const bookLoading = bookRefs.isLoading;
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 const activeTab = ref("pending");
@@ -814,6 +1142,8 @@ const selectedBorrow = ref(null);
 const isSubmitting = ref(false);
 
 // Modals
+const showNewBorrowModal = ref(false);
+const showDetailModal = ref(false);
 const showReturnModal = ref(false);
 const showRejectModal = ref(false);
 const showExtendModal = ref(false);
@@ -832,9 +1162,21 @@ const rejectReason = ref("");
 
 // Toast
 const toast = ref({ show: false, type: "success", message: "" });
+const createBorrowErrors = ref({});
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
-const fineRatePerDay = 5000; // VND per day late
+const fineRatePerDay = 10000; // VND per day late
+const pageSize = 10;
+const statusLabels = {
+  pending: "Chờ duyệt",
+  approved: "Đang mượn",
+  returned: "Đã trả",
+  rejected: "Từ chối",
+  lost: "Mất sách",
+  overdue: "Quá hạn",
+};
+
+let borrowItemId = 0;
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const tabs = computed(() => [
@@ -906,32 +1248,77 @@ const stats = computed(() => [
 // ─── COMPUTED ─────────────────────────────────────────────────────────────────
 const filteredBorrows = computed(() => {
   let list = borrows.value.filter((b) => b.status === activeTab.value);
+
+  if (filterDate.value) {
+    list = list.filter((borrow) => matchesDateFilter(borrow.borrowDate));
+  }
+
   if (searchQuery.value) {
     const q = searchQuery.value.toLowerCase();
     list = list.filter(
       (b) =>
         b.reader?.name?.toLowerCase().includes(q) ||
+        b.reader?.email?.toLowerCase().includes(q) ||
         b.book?.title?.toLowerCase().includes(q) ||
+        b.book?.author?.toLowerCase().includes(q) ||
         b.borrowCode?.toLowerCase().includes(q),
     );
   }
   return list;
 });
 
-const totalPages = computed(() => pagination.value?.totalPages || 1);
-const visiblePages = computed(() => {
-  const pages = [];
-  for (let i = 1; i <= totalPages.value; i++) pages.push(i);
-  return pages.slice(0, 7); // simplified
+const paginatedBorrows = computed(() => {
+  const start = (currentPage.value - 1) * pageSize;
+  return filteredBorrows.value.slice(start, start + pageSize);
 });
+
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(filteredBorrows.value.length / pageSize)),
+);
+
+const visiblePages = computed(() => {
+  const total = totalPages.value;
+  const current = currentPage.value;
+
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, index) => index + 1);
+  }
+
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, "...", total];
+  }
+
+  if (current >= total - 3) {
+    return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
+  }
+
+  return [1, "...", current - 1, current, current + 1, "...", total];
+});
+
+const isReferenceLoading = computed(
+  () => readerLoading.value || bookLoading.value,
+);
+const availableReaders = computed(() =>
+  readers.value.filter((reader) => reader.role === "user"),
+);
+const availableBooks = computed(() =>
+  books.value
+    .filter((book) => book.soLuongTienTai > 0)
+    .sort((a, b) => a.tenSach.localeCompare(b.tenSach, "vi")),
+);
+const activeBorrowCountByReader = computed(() =>
+  borrows.value.reduce((acc, borrow) => {
+    if (!borrow.reader?.id) return acc;
+    if (!["pending", "approved"].includes(borrow.status)) return acc;
+    acc[borrow.reader.id] = (acc[borrow.reader.id] || 0) + 1;
+    return acc;
+  }, {}),
+);
 
 // ─── FINE CALCULATION ─────────────────────────────────────────────────────────
 const computedOverdueDays = computed(() => {
   if (!selectedBorrow.value) return 0;
-  const now = new Date();
-  const due = new Date(selectedBorrow.value.dueDate);
-  const diff = Math.floor((now - due) / (1000 * 60 * 60 * 24));
-  return Math.max(0, diff);
+  return getOverdueDays(selectedBorrow.value);
 });
 
 const lateFine = computed(() => computedOverdueDays.value * fineRatePerDay);
@@ -953,6 +1340,14 @@ function formatDate(date) {
   }).format(new Date(date));
 }
 
+function formatInputDate(date) {
+  const value = new Date(date);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function formatCurrency(amount) {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
@@ -960,15 +1355,48 @@ function formatCurrency(amount) {
   }).format(amount || 0);
 }
 
+function getStatusLabel(status) {
+  return statusLabels[status] || status || "—";
+}
+
+function createBorrowItem() {
+  borrowItemId += 1;
+  return {
+    id: borrowItemId,
+    bookId: "",
+    quantity: 1,
+  };
+}
+
+function getDefaultBorrowForm() {
+  const today = new Date();
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 7);
+
+  return {
+    userId: "",
+    borrowDate: formatInputDate(today),
+    dueDate: formatInputDate(dueDate),
+    note: "",
+    saveAndContinue: false,
+    items: [createBorrowItem()],
+  };
+}
+
+const newBorrowForm = ref(getDefaultBorrowForm());
+
 function isOverdue(borrow) {
   if (borrow.status !== "approved") return false;
-  return new Date() > new Date(borrow.dueDate);
+  return getOverdueDays(borrow) > 0;
 }
 
 function getOverdueDays(borrow) {
   const now = new Date();
   const due = new Date(borrow.dueDate);
-  return Math.floor((now - due) / (1000 * 60 * 60 * 24));
+  const msDiff =
+    Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) -
+    Date.UTC(due.getFullYear(), due.getMonth(), due.getDate());
+  return Math.max(0, Math.ceil(msDiff / (1000 * 60 * 60 * 24)));
 }
 
 function getDueDateClass(borrow) {
@@ -993,21 +1421,273 @@ function showToast(type, message) {
   setTimeout(() => (toast.value.show = false), 3000);
 }
 
+function getReaderActiveBorrowCount(readerId) {
+  return activeBorrowCountByReader.value[readerId] || 0;
+}
+
+function getBookById(bookId) {
+  return books.value.find((book) => book._id === bookId) || null;
+}
+
+function getBorrowLineStock(item) {
+  if (!item.bookId) return 0;
+  const book = getBookById(item.bookId);
+  if (!book) return 0;
+
+  const quantityInOtherRows = newBorrowForm.value.items.reduce((sum, row) => {
+    if (row.id === item.id || row.bookId !== item.bookId) return sum;
+    return sum + Number(row.quantity || 0);
+  }, 0);
+
+  return Math.max(0, book.soLuongTienTai - quantityInOtherRows);
+}
+
+function isBookOptionDisabled(bookId, currentItemId) {
+  return newBorrowForm.value.items.some(
+    (item) => item.id !== currentItemId && item.bookId === bookId,
+  );
+}
+
+function normalizeBorrowItemQuantity(item) {
+  const max = getBorrowLineStock(item);
+  const nextQuantity = Number(item.quantity || 1);
+  if (!item.bookId) {
+    item.quantity = Math.max(1, nextQuantity || 1);
+    return;
+  }
+
+  if (max <= 0) {
+    item.quantity = 1;
+    return;
+  }
+
+  item.quantity = Math.min(Math.max(1, Math.floor(nextQuantity || 1)), max);
+}
+
+function addBorrowItem() {
+  newBorrowForm.value.items.push(createBorrowItem());
+}
+
+function removeBorrowItem(itemId) {
+  if (newBorrowForm.value.items.length === 1) {
+    newBorrowForm.value.items = [createBorrowItem()];
+    return;
+  }
+
+  newBorrowForm.value.items = newBorrowForm.value.items.filter(
+    (item) => item.id !== itemId,
+  );
+}
+
+function resetBorrowForm({ keepModalOpen = false } = {}) {
+  const saveAndContinue = keepModalOpen
+    ? newBorrowForm.value.saveAndContinue
+    : false;
+  newBorrowForm.value = {
+    ...getDefaultBorrowForm(),
+    saveAndContinue,
+  };
+  createBorrowErrors.value = {};
+}
+
+function getBorrowItemError(index, field) {
+  return createBorrowErrors.value.items?.[index]?.[field] || "";
+}
+
+function matchesDateFilter(date) {
+  if (!filterDate.value) return true;
+
+  const target = new Date(date);
+  const now = new Date();
+  const targetOnly = Date.UTC(
+    target.getFullYear(),
+    target.getMonth(),
+    target.getDate(),
+  );
+  const nowOnly = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+
+  if (filterDate.value === "today") {
+    return targetOnly === nowOnly;
+  }
+
+  if (filterDate.value === "week") {
+    const day = now.getDay() || 7;
+    const start = new Date(now);
+    start.setDate(now.getDate() - day + 1);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+
+    return target >= start && target <= end;
+  }
+
+  if (filterDate.value === "month") {
+    return (
+      target.getMonth() === now.getMonth() &&
+      target.getFullYear() === now.getFullYear()
+    );
+  }
+
+  return true;
+}
+
+function validateCreateBorrowForm() {
+  const errors = { items: [] };
+  const { userId, borrowDate, dueDate, items } = newBorrowForm.value;
+  const trimmedItems = items.filter((item) => item.bookId);
+
+  if (!userId) {
+    errors.userId = "Vui lòng chọn bạn đọc.";
+  }
+
+  if (!borrowDate) {
+    errors.borrowDate = "Vui lòng chọn ngày mượn.";
+  }
+
+  if (!dueDate) {
+    errors.dueDate = "Vui lòng chọn ngày hẹn trả.";
+  }
+
+  if (borrowDate && dueDate && new Date(dueDate) < new Date(borrowDate)) {
+    errors.dueDate = "Ngày hẹn trả phải lớn hơn hoặc bằng ngày mượn.";
+  }
+
+  if (trimmedItems.length === 0) {
+    errors.itemsGeneral = "Vui lòng chọn ít nhất một nhan đề.";
+  }
+
+  const selectedBooks = new Set();
+  let totalQuantity = 0;
+
+  newBorrowForm.value.items.forEach((item, index) => {
+    const rowErrors = {};
+    if (!item.bookId) {
+      rowErrors.bookId = "Chọn nhan đề.";
+    } else {
+      if (selectedBooks.has(item.bookId)) {
+        rowErrors.bookId = "Nhãn đề này đã được chọn ở dòng khác.";
+      }
+      selectedBooks.add(item.bookId);
+    }
+
+    const quantity = Number(item.quantity || 0);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      rowErrors.quantity = "Số lượng phải là số nguyên dương.";
+    } else {
+      totalQuantity += quantity;
+      const max = getBorrowLineStock(item);
+      if (item.bookId && quantity > max) {
+        rowErrors.quantity = `Số lượng tối đa còn lại là ${max}.`;
+      }
+    }
+
+    errors.items[index] = rowErrors;
+  });
+
+  if (
+    userId &&
+    getReaderActiveBorrowCount(userId) + totalQuantity > 3
+  ) {
+    errors.itemsGeneral = `Bạn đọc đang có ${getReaderActiveBorrowCount(
+      userId,
+    )} sách chờ duyệt/đang mượn. Tổng số sách tối đa là 3.`;
+  }
+
+  if (!errors.items.some((item) => Object.keys(item).length > 0)) {
+    delete errors.items;
+  }
+
+  return errors;
+}
+
 let searchTimer = null;
 function debouncedSearch() {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {}, 300);
+  searchTimer = setTimeout(() => {
+    currentPage.value = 1;
+  }, 250);
 }
 
 // ─── ACTIONS ──────────────────────────────────────────────────────────────────
-function openNewBorrowModal() {
-  /* TODO */
+async function loadBorrowReferences() {
+  await Promise.all([
+    readerStore.fetchReaders({ role: "user", limit: 200 }),
+    bookStore.fetchBooks({ limit: 200 }),
+  ]);
 }
+
+async function openNewBorrowModal() {
+  try {
+    await loadBorrowReferences();
+    resetBorrowForm({ keepModalOpen: true });
+    showNewBorrowModal.value = true;
+  } catch (error) {
+    showToast("error", error.message || "Không thể tải dữ liệu tạo phiếu mượn");
+  }
+}
+
+function closeNewBorrowModal() {
+  showNewBorrowModal.value = false;
+  resetBorrowForm();
+}
+
 function viewDetail(borrow) {
-  /* TODO: open detail drawer */
+  selectedBorrow.value = borrow;
+  showDetailModal.value = true;
 }
+
 function exportData() {
-  /* TODO: call export API */
+  if (filteredBorrows.value.length === 0) {
+    showToast("error", "Không có dữ liệu để xuất");
+    return;
+  }
+
+  const rows = [
+    [
+      "Ma phieu",
+      "Ban doc",
+      "Email",
+      "Nhan de",
+      "Tac gia",
+      "Ngay muon",
+      "Han tra",
+      "Trang thai",
+      "Tien phat",
+      "Ghi chu",
+    ],
+    ...filteredBorrows.value.map((borrow) => [
+      borrow.borrowCode,
+      borrow.reader?.name || "",
+      borrow.reader?.email || "",
+      borrow.book?.title || "",
+      borrow.book?.author || "",
+      formatDate(borrow.borrowDate),
+      formatDate(borrow.dueDate),
+      getStatusLabel(borrow.status),
+      borrow.fineAmount || 0,
+      borrow.note || "",
+    ]),
+  ];
+
+  const csvContent = rows
+    .map((row) =>
+      row
+        .map((cell) => `"${String(cell ?? "").replaceAll('"', '""')}"`)
+        .join(","),
+    )
+    .join("\n");
+
+  const blob = new Blob([`\uFEFF${csvContent}`], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `phieu-muon-${activeTab.value}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function openReturnModal(borrow) {
@@ -1035,8 +1715,8 @@ async function approveBorrow(borrow) {
   try {
     await borrowStore.approveBorrow(borrow._id);
     showToast("success", `Đã duyệt phiếu mượn #${borrow.borrowCode}`);
-  } catch {
-    showToast("error", "Có lỗi xảy ra, vui lòng thử lại");
+  } catch (error) {
+    showToast("error", error.message || "Có lỗi xảy ra, vui lòng thử lại");
   }
 }
 
@@ -1053,8 +1733,8 @@ async function confirmReturn() {
         ? "Đã ghi nhận mất sách thành công!"
         : "Đã xác nhận trả sách thành công!",
     );
-  } catch {
-    showToast("error", "Có lỗi xảy ra khi xử lý trả sách");
+  } catch (error) {
+    showToast("error", error.message || "Có lỗi xảy ra khi xử lý trả sách");
   } finally {
     isSubmitting.value = false;
   }
@@ -1070,8 +1750,8 @@ async function confirmReject() {
     );
     showRejectModal.value = false;
     showToast("success", "Đã từ chối yêu cầu mượn sách");
-  } catch {
-    showToast("error", "Có lỗi xảy ra");
+  } catch (error) {
+    showToast("error", error.message || "Có lỗi xảy ra");
   } finally {
     isSubmitting.value = false;
   }
@@ -1083,25 +1763,91 @@ async function confirmExtend() {
     await borrowStore.extendBorrow(selectedBorrow.value._id, extendDays.value);
     showExtendModal.value = false;
     showToast("success", `Đã gia hạn thêm ${extendDays.value} ngày`);
-  } catch {
-    showToast("error", "Có lỗi xảy ra khi gia hạn");
+  } catch (error) {
+    showToast("error", error.message || "Có lỗi xảy ra khi gia hạn");
+  } finally {
+    isSubmitting.value = false;
+  }
+}
+
+async function submitNewBorrow() {
+  createBorrowErrors.value = validateCreateBorrowForm();
+
+  const hasErrors =
+    Object.keys(createBorrowErrors.value).length > 0 &&
+    (createBorrowErrors.value.userId ||
+      createBorrowErrors.value.borrowDate ||
+      createBorrowErrors.value.dueDate ||
+      createBorrowErrors.value.itemsGeneral ||
+      createBorrowErrors.value.items);
+
+  if (hasErrors) {
+    showToast("error", "Vui lòng kiểm tra lại thông tin phiếu mượn");
+    return;
+  }
+
+  isSubmitting.value = true;
+  try {
+    const payload = {
+      userId: newBorrowForm.value.userId,
+      ngayMuon: newBorrowForm.value.borrowDate,
+      ngayHenTra: newBorrowForm.value.dueDate,
+      ghiChu: newBorrowForm.value.note,
+      items: newBorrowForm.value.items.map((item) => ({
+        bookId: item.bookId,
+        quantity: Number(item.quantity || 1),
+      })),
+    };
+
+    const createdBorrows = await borrowStore.createAdminBorrow(payload);
+    await bookStore.fetchBooks({ limit: 200 });
+
+    activeTab.value = "approved";
+    currentPage.value = 1;
+
+    showToast(
+      "success",
+      `Đã tạo ${createdBorrows.length} phiếu mượn thành công`,
+    );
+
+    if (newBorrowForm.value.saveAndContinue) {
+      resetBorrowForm({ keepModalOpen: true });
+      return;
+    }
+
+    closeNewBorrowModal();
+  } catch (error) {
+    showToast(
+      "error",
+      error.message || "Không thể tạo phiếu mượn. Vui lòng thử lại.",
+    );
   } finally {
     isSubmitting.value = false;
   }
 }
 
 // ─── WATCHERS ─────────────────────────────────────────────────────────────────
-watch(activeTab, () => {
+watch([activeTab, filterDate], () => {
   currentPage.value = 1;
-  borrowStore.fetchBorrows({ status: activeTab.value, page: 1 });
 });
-watch(currentPage, (page) => {
-  borrowStore.fetchBorrows({ status: activeTab.value, page });
+
+watch(searchQuery, () => {
+  currentPage.value = 1;
+});
+
+watch(filteredBorrows, () => {
+  if (currentPage.value > totalPages.value) {
+    currentPage.value = totalPages.value;
+  }
 });
 
 // ─── LIFECYCLE ────────────────────────────────────────────────────────────────
-onMounted(() => {
-  borrowStore.fetchBorrows({ status: "pending" });
+onMounted(async () => {
+  try {
+    await borrowStore.fetchBorrows({ limit: 500 });
+  } catch (error) {
+    showToast("error", error.message || "Không thể tải danh sách phiếu mượn");
+  }
 });
 </script>
 
@@ -1771,6 +2517,12 @@ onMounted(() => {
 .modal--return {
   max-width: 600px;
 }
+.modal--lg {
+  max-width: 1180px;
+}
+.modal--detail {
+  max-width: 760px;
+}
 
 .modal-header {
   display: flex;
@@ -1829,6 +2581,137 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.borrow-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.borrow-lines {
+  border: 1px solid #e8e3db;
+  border-radius: 14px;
+  overflow-x: auto;
+}
+
+.borrow-create-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.borrow-create-table thead tr {
+  background: #faf8f5;
+}
+
+.borrow-create-table th,
+.borrow-create-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f0ece3;
+  text-align: left;
+  vertical-align: top;
+}
+
+.borrow-create-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.input-field--compact {
+  min-width: 140px;
+}
+
+.input-field--error {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08);
+}
+
+.book-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.book-meta__title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.book-meta__line,
+.table-placeholder,
+.helper-text {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.row-action-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #e8e3db;
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.row-action-btn:hover {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: #374151;
+}
+
+.inline-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: #0f1623;
+}
+
+.form-error {
+  font-size: 0.76rem;
+  color: #dc2626;
+  margin-top: 4px;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.detail-card {
+  background: #faf8f5;
+  border: 1px solid #e8e3db;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ca3af;
+}
+
+.detail-card strong {
+  color: #1a1a2e;
+  font-size: 0.92rem;
+}
+
+.detail-card small {
+  color: #6b7280;
+  font-size: 0.8rem;
 }
 
 /* Return modal specific */
@@ -2204,6 +3087,14 @@ onMounted(() => {
 .mt-4 {
   margin-top: 16px;
 }
-</style>
 
-export default { name: "Borrows" }
+@media (max-width: 900px) {
+  .borrow-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal {
+    max-height: 95vh;
+  }
+}
+</style>
