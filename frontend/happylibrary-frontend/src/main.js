@@ -37,43 +37,40 @@ if (import.meta.env.DEV) {
 app.use(createPinia()); // State management
 app.use(router); // Routing
 
-// ─── Global Notification Toast Provider ─────────────────────────────────────
+// ─── Global Notification Toast Container ─────────────────────────────────────
+const toastContainer = document.createElement("div");
+toastContainer.id = "toast-container";
+document.body.appendChild(toastContainer);
+
 let toastQueue = [];
-let activeToast = null;
+let activeToastIndex = -1;
 
 function showToast(notification) {
   toastQueue.push(notification);
-  if (!activeToast) showNextToast();
+  if (activeToastIndex === -1) renderNextToast();
 }
 
-function showNextToast() {
+function renderNextToast() {
   if (toastQueue.length === 0) return;
 
-  activeToast = toastQueue.shift();
-  const toastApp = createApp(NotificationToast, { notification: activeToast });
-  toastApp.mount(document.createElement("div"));
+  const notification = toastQueue.shift();
+  const toastEl = document.createElement("div");
+  toastContainer.appendChild(toastEl);
 
-  // Auto dismiss after timeout
+  const toastApp = createApp(NotificationToast, { notification });
+  toastApp.mount(toastEl);
+
+  // Auto dismiss
   setTimeout(() => {
     toastApp.unmount();
-    activeToast = null;
-    showNextToast();
+    toastEl.remove();
+    activeToastIndex = -1;
+    renderNextToast();
   }, 5000);
 }
 
-// Listen for new notifications globally
-const notificationStore = useNotificationStore();
-watch(
-  () => notificationStore.notifications,
-  (notifications) => {
-    notifications.forEach((notification) => {
-      if (!notification.read) {
-        showToast(notification);
-      }
-    });
-  },
-  { deep: true },
-);
+// ─── MOUNT APP ──────────────────────────────────────────────────────────────
+app.mount("#app");
 
 // ─── MOUNT APP ──────────────────────────────────────────────────────────────
 app.mount("#app");
