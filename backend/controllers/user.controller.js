@@ -144,16 +144,44 @@ exports.delete = async (req, res) => {
 };
 
 // [USER] Cập nhật thông tin bản thân
+const mongoose = require("mongoose");
+
 exports.updateProfile = async (req, res) => {
   try {
+    // Safety check & debug
+    console.log(
+      "[updateProfile] req.user._id:",
+      req.user?._id,
+      "type:",
+      typeof req.user?._id,
+    );
+    if (
+      !req.user ||
+      !req.user._id ||
+      !mongoose.Types.ObjectId.isValid(req.user._id)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID. Please login again.",
+      });
+    }
+
     const { hoTen, ngaySinh, phai, diaChi, dienThoai } = req.body;
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { hoTen, ngaySinh, phai, diaChi, dienThoai },
       { new: true, runValidators: true },
     ).select("-googleId");
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+    }
+
     res.json({ success: true, data: user });
   } catch (err) {
+    console.error("[updateProfile error]", err);
     res.status(500).json({ success: false, message: err.message });
   }
 };

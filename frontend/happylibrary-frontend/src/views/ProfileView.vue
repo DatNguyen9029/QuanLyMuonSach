@@ -60,7 +60,7 @@
             >Số điện thoại</label
           >
           <input
-            v-model="form.sdt"
+            v-model="form.dienThoai"
             type="tel"
             class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
           />
@@ -106,7 +106,7 @@ const authStore = useAuthStore();
 const isUpdating = ref(false);
 const form = ref({
   hoTen: "",
-  sdt: "",
+  dienThoai: "",
   diaChi: "",
 });
 
@@ -117,7 +117,7 @@ const userInitial = computed(() =>
 function resetForm() {
   form.value = {
     hoTen: authStore.user?.hoTen || "",
-    sdt: authStore.user?.sdt || "",
+    dienThoai: authStore.user?.dienThoai || "",
     diaChi: authStore.user?.diaChi || "",
   };
 }

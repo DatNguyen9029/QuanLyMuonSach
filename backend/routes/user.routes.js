@@ -5,8 +5,8 @@ const { protect, adminOnly } = require("../middleware/auth.middleware");
 
 router.get("/", protect, adminOnly, userCtrl.getAll);
 router.post("/", protect, adminOnly, userCtrl.create);
+router.put("/profile", protect, userCtrl.updateProfile);
 router.put("/:id", protect, adminOnly, userCtrl.update);
 router.delete("/:id", protect, adminOnly, userCtrl.delete);
-router.put("/profile", protect, userCtrl.updateProfile);
 
 module.exports = router;

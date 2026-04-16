@@ -44,22 +44,86 @@ io.on("connection", (socket) => {
 
   // --- Chat: User/Admin nhắn tin ---
   // Frontend emit: socket.emit('sendMessage', { sender, message })
-  socket.on("sendMessage", (data) => {
+  socket.on("sendMessage", async (data) => {
     const ChatMessage = require("./models/ChatMessage.model");
+    const Notification = require("./models/Notification.model");
+
     const msg = new ChatMessage({
       sender: data.sender,
       message: data.message,
     });
-    msg.save().then((saved) => {
-      // Broadcast tới toàn bộ client (kể cả admin dashboard)
-      io.emit("newMessage", saved);
-    });
+
+    const saved = await msg.save();
+
+    // Broadcast new message
+    io.emit("newMessage", saved);
+
+    // NEW: Notification for recipient if specified, or admin broadcast
+    if (data.recipientUserId) {
+      const userNotif = new Notification({
+        user: data.recipientUserId,
+        title: "Tin nhắn mới",
+        message: `${data.senderName || "Admin"}: "${data.message.slice(0, 50)}..."`,
+        type: "chat_new",
+        relatedId: saved._id,
+        relatedType: "chat",
+        data: { senderId: data.sender },
+      });
+      await userNotif.save();
+      io.to(`user_${data.recipientUserId}`).emit("newNotification", userNotif);
+    } else {
+      // Admin notification for new user message
+      const adminNotif = new Notification({
+        title: "Tin nhắn mới",
+        message: `Người dùng ${data.sender} gửi: "${data.message.slice(0, 50)}..."`,
+        type: "chat_new",
+        relatedId: saved._id,
+        relatedType: "chat",
+        data: { senderId: data.sender },
+      });
+      await adminNotif.save();
+      io.emit("adminNotification", adminNotif);
+    }
   });
 
   // --- Join room theo userId để nhận thông báo cá nhân ---
   socket.on("joinUserRoom", (userId) => {
     socket.join(`user_${userId}`);
     console.log(`[Socket.io] User ${userId} joined room user_${userId}`);
+  });
+
+  // ─── NEW: Notification Socket Events ───────────────────────────────────────
+  // Frontend emit: markNotificationRead(notificationId)
+  socket.on("markNotificationRead", async (notificationId) => {
+    try {
+      const Notification = require("./models/Notification.model");
+      const notification = await Notification.findByIdAndUpdate(
+        notificationId,
+        { read: true },
+        { new: true },
+      );
+      if (notification) {
+        socket.emit("notificationRead", { id: notification._id });
+      }
+    } catch (err) {
+      console.error("[Socket] Mark notification read error:", err.message);
+    }
+  });
+
+  // Frontend emit: markAllNotificationsRead()
+  socket.on("markAllNotificationsRead", async (userId) => {
+    try {
+      const Notification = require("./models/Notification.model");
+      const result = await Notification.updateMany(
+        { user: userId, read: false },
+        { read: true },
+      );
+      socket.emit("allNotificationsRead", {
+        modifiedCount: result.modifiedCount,
+      });
+    } catch (err) {
+      console.error("[Socket] Mark all notifications read error:", err.message);
+    }
   });
 
   socket.on("disconnect", () => {

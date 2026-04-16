@@ -110,6 +110,27 @@ exports.createBorrowRequest = async (req, res) => {
       trangThai: "ChoDuyet",
     });
 
+    // ── NEW: Notification khi tạo yêu cầu mượn (cho admin) ───────────────
+    const Notification = require("../models/Notification.model");
+    const io = req.app.get("io");
+
+    const adminNotif = new Notification({
+      title: `Yêu cầu mượn sách mới`,
+      message: `Người dùng ${req.user.hoTen} vừa tạo yêu cầu mượn sách.`,
+      type: "borrow_update",
+      relatedId: record._id,
+      relatedType: "borrow",
+      data: {
+        userId: req.user._id,
+        userName: req.user.hoTen,
+        borrowId: record._id,
+      },
+    });
+    await adminNotif.save();
+
+    // Emit broadcast cho admin
+    io.emit("adminNotification", adminNotif);
+
     return res.status(201).json({ success: true, data: record });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
@@ -124,7 +145,13 @@ exports.updateBorrowStatus = async (req, res) => {
     const { id } = req.params;
     const { trangThai, lyDoTuChoi } = req.body;
 
-    const validStatuses = ["ChoDuyet", "DangMuon", "DaTra", "MatSach", "TuChoi"];
+    const validStatuses = [
+      "ChoDuyet",
+      "DangMuon",
+      "DaTra",
+      "MatSach",
+      "TuChoi",
+    ];
     if (!validStatuses.includes(trangThai)) {
       return res
         .status(400)
@@ -201,8 +228,43 @@ exports.updateBorrowStatus = async (req, res) => {
     record.trangThai = trangThai;
     await record.save();
 
-    // ── Emit Socket.io: Thông báo cập nhật tới VueJS frontend ─────────────
+    // ── NEW: Tạo & Emit Notification ─────────────────────────────────────
+    const Notification = require("../models/Notification.model");
     const io = req.app.get("io");
+
+    // Notification cho user
+    const userNotif = new Notification({
+      user: record.user,
+      title: `Phiếu mượn ${record._id.slice(-6).toUpperCase()} đã được cập nhật`,
+      message: `Trạng thái: ${trangThai}. ${record.tienPhat > 0 ? `Phạt: ${record.tienPhat.toLocaleString()}đ` : ""}`,
+      type: "borrow_update",
+      relatedId: record._id,
+      relatedType: "borrow",
+      data: { trangThai, tienPhat: record.tienPhat },
+    });
+    await userNotif.save();
+
+    // Emit tới user room
+    io.to(`user_${record.user}`).emit("newNotification", userNotif);
+
+    // Notification cho admin (nếu không phải admin thực hiện)
+    if (req.user.role !== "admin") {
+      const adminNotif = new Notification({
+        user: null, // Broadcast cho tất cả admin sau
+        title: `Phiếu mượn mới được cập nhật`,
+        message: `Phiếu ${record._id.slice(-6).toUpperCase()}: ${trangThai}`,
+        type: "borrow_update",
+        relatedId: record._id,
+        relatedType: "borrow",
+        data: { trangThai },
+      });
+      await adminNotif.save();
+
+      // Emit broadcast cho admin
+      io.emit("adminNotification", adminNotif);
+    }
+
+    // ── Emit Socket.io: Thông báo cập nhật UI (legacy) ───────────────────
     // Emit tới room cá nhân của user để cập nhật UI không cần reload
     io.to(`user_${record.user}`).emit("borrowStatusUpdated", {
       recordId: record._id,

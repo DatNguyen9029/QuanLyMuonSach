@@ -37,5 +37,43 @@ if (import.meta.env.DEV) {
 app.use(createPinia()); // State management
 app.use(router); // Routing
 
+// ─── Global Notification Toast Provider ─────────────────────────────────────
+let toastQueue = [];
+let activeToast = null;
+
+function showToast(notification) {
+  toastQueue.push(notification);
+  if (!activeToast) showNextToast();
+}
+
+function showNextToast() {
+  if (toastQueue.length === 0) return;
+
+  activeToast = toastQueue.shift();
+  const toastApp = createApp(NotificationToast, { notification: activeToast });
+  toastApp.mount(document.createElement("div"));
+
+  // Auto dismiss after timeout
+  setTimeout(() => {
+    toastApp.unmount();
+    activeToast = null;
+    showNextToast();
+  }, 5000);
+}
+
+// Listen for new notifications globally
+const notificationStore = useNotificationStore();
+watch(
+  () => notificationStore.notifications,
+  (notifications) => {
+    notifications.forEach((notification) => {
+      if (!notification.read) {
+        showToast(notification);
+      }
+    });
+  },
+  { deep: true },
+);
+
 // ─── MOUNT APP ──────────────────────────────────────────────────────────────
 app.mount("#app");
