@@ -202,3 +202,5 @@ const formatTime = (timestamp) => {
 <style scoped>
 /* Component-specific styles */
 </style>
+
+export default { name: "Chats" }

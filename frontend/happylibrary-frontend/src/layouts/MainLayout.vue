@@ -101,9 +101,11 @@
               }}</span>
             </Transition>
             <Transition name="label-fade">
-              <span v-if="!isSidebarCollapsed && item.badge" class="nav-badge">{{
-                item.badge
-              }}</span>
+              <span
+                v-if="!isSidebarCollapsed && item.badge"
+                class="nav-badge"
+                >{{ item.badge }}</span
+              >
             </Transition>
           </router-link>
         </template>
@@ -290,12 +292,22 @@
 
       <!-- PAGE CONTENT -->
       <main class="main-content">
-        <RouterView v-slot="{ Component }">
-          <Transition name="page-fade" mode="out-in">
-            <KeepAlive :include="keepAliveViews">
-              <component :is="Component" />
-            </KeepAlive>
-          </Transition>
+        <RouterView v-slot="{ Component, route }">
+          <!-- KEEP ALIVE -->
+          <KeepAlive>
+            <component
+              v-if="route.meta.keepAlive"
+              :is="Component"
+              :key="route.path"
+            />
+          </KeepAlive>
+
+          <!-- NORMAL -->
+          <component
+            v-if="!route.meta.keepAlive"
+            :is="Component"
+            :key="route.path"
+          />
         </RouterView>
       </main>
     </div>
@@ -322,14 +334,6 @@ const notificationStore = useNotificationStore();
 const isSidebarCollapsed = ref(false);
 const isMobileMenuOpen = ref(false);
 const isProfileDropdownOpen = ref(false);
-const keepAliveViews = [
-  "Dashboard",
-  "Books",
-  "Borrows",
-  "Readers",
-  "Publishers",
-  "Chat",
-];
 
 const userInitial = computed(() =>
   (authStore.user?.hoTen || "U").charAt(0).toUpperCase(),
@@ -396,7 +400,7 @@ const adminNavItems = computed(() => [
   },
 ]);
 
-const isActive = (path) => route.path === path;
+const isActive = (path) => route.path.startsWith(path);
 
 function toggleNotifications() {
   isProfileDropdownOpen.value = false;

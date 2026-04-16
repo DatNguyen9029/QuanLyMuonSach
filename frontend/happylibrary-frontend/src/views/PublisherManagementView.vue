@@ -60,19 +60,29 @@
         <table class="w-full table-auto">
           <thead>
             <tr class="border-b border-gray-200">
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Mã NXB
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Tên NXB
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Địa chỉ
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Số sách liên kết
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Hành động
               </th>
             </tr>
@@ -245,7 +255,10 @@ async function savePublisher() {
 
   try {
     if (editingPublisher.value?._id) {
-      await publisherStore.updatePublisher(editingPublisher.value._id, form.value);
+      await publisherStore.updatePublisher(
+        editingPublisher.value._id,
+        form.value,
+      );
     } else {
       await publisherStore.createPublisher(form.value);
     }
@@ -269,3 +282,5 @@ async function removePublisher(publisher) {
   }
 }
 </script>
+
+export default { name: "Publishers" }

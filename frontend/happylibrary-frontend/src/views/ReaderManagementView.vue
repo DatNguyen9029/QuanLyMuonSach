@@ -65,28 +65,44 @@
         <table class="w-full table-auto">
           <thead>
             <tr class="border-b border-gray-200">
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 ID
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Họ tên
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Username
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Email
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Điện thoại
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Vai trò
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Ngày tham gia
               </th>
-              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Hành động
               </th>
             </tr>
@@ -365,3 +381,5 @@ const removeReader = async (readerId) => {
 <style scoped>
 /* Component-specific styles */
 </style>
+
+export default { name: "Readers" }

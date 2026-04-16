@@ -139,3 +139,5 @@ onMounted(() => {
   resetForm();
 });
 </script>
+
+export default { name: "Profiles" }

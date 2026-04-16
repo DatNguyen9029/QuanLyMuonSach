@@ -265,3 +265,5 @@ const deleteBook = async (bookId) => {
 <style scoped>
 /* Component-specific styles */
 </style>
+
+export default { name: "Books" }

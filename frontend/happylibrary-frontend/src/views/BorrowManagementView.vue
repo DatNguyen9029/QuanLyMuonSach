@@ -935,9 +935,7 @@ const computedOverdueDays = computed(() => {
 });
 
 const lateFine = computed(() => computedOverdueDays.value * fineRatePerDay);
-const lostFine = computed(
-  () => selectedBorrow.value?.book?.price || 0,
-);
+const lostFine = computed(() => selectedBorrow.value?.book?.price || 0);
 
 const totalFine = computed(() => {
   if (returnForm.value.fineType === "late") return lateFine.value;
@@ -2207,3 +2205,5 @@ onMounted(() => {
   margin-top: 16px;
 }
 </style>
+
+export default { name: "Borrows" }

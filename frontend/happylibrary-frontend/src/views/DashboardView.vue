@@ -223,3 +223,5 @@ async function loadDashboardData() {
 
 onMounted(loadDashboardData);
 </script>
+
+export default { name: "Dashboard" }

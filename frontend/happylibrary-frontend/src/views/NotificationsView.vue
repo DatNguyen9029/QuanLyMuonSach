@@ -318,3 +318,5 @@ onMounted(() => {
   backdrop-filter: blur(10px);
 }
 </style>
+
+export default { name: "Notifications" }
