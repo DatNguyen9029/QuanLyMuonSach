@@ -11,13 +11,25 @@ export const useBookStore = defineStore("book", () => {
   // Computed
   const bookCount = computed(() => books.value.length);
 
+  const normalizeBook = (book) => ({
+    _id: book._id,
+    tenSach: book.tenSach || "",
+    tacGia: book.tacGia || "",
+    nxb: book.nxb?._id || book.nxb || "",
+    tenNXB: book.nxb?.tenNXB || "",
+    namXuatBan: book.namXuatBan || "",
+    soLuongTienTai: book.soLuongTienTai || 0,
+    donGia: book.donGia || 0,
+    hinhAnh: book.hinhAnh || "",
+  });
+
   // Actions
   const fetchBooks = async (params = {}) => {
     isLoading.value = true;
     error.value = null;
     try {
       const { data } = await api.get("/books", { params });
-      books.value = data.data || data;
+      books.value = (data.data || []).map(normalizeBook);
     } catch (err) {
       error.value = err.message;
     } finally {
@@ -30,8 +42,9 @@ export const useBookStore = defineStore("book", () => {
     error.value = null;
     try {
       const { data } = await api.post("/books", bookData);
-      books.value.push(data);
-      return data;
+      const createdBook = normalizeBook(data.data);
+      books.value.unshift(createdBook);
+      return createdBook;
     } catch (err) {
       error.value = err.message;
       throw err;
@@ -45,11 +58,12 @@ export const useBookStore = defineStore("book", () => {
     error.value = null;
     try {
       const { data } = await api.put(`/books/${bookId}`, bookData);
-      const index = books.value.findIndex((b) => b.id === bookId);
+      const updatedBook = normalizeBook(data.data);
+      const index = books.value.findIndex((b) => b._id === bookId);
       if (index > -1) {
-        books.value[index] = data;
+        books.value[index] = updatedBook;
       }
-      return data;
+      return updatedBook;
     } catch (err) {
       error.value = err.message;
       throw err;
@@ -63,7 +77,7 @@ export const useBookStore = defineStore("book", () => {
     error.value = null;
     try {
       await api.delete(`/books/${bookId}`);
-      books.value = books.value.filter((b) => b.id !== bookId);
+      books.value = books.value.filter((b) => b._id !== bookId);
     } catch (err) {
       error.value = err.message;
       throw err;

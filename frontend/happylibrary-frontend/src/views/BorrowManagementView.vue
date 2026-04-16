@@ -512,22 +512,6 @@
                   <label
                     class="fine-option"
                     :class="{
-                      'fine-option--active': returnForm.fineType === 'damaged',
-                    }"
-                  >
-                    <input
-                      type="radio"
-                      v-model="returnForm.fineType"
-                      value="damaged"
-                    />
-                    <div>
-                      <span class="fine-option-icon">📝</span>
-                      <span class="fine-option-label">Hư hỏng</span>
-                    </div>
-                  </label>
-                  <label
-                    class="fine-option"
-                    :class="{
                       'fine-option--active': returnForm.fineType === 'none',
                     }"
                   >
@@ -579,43 +563,10 @@
                       formatCurrency(selectedBorrow.book?.price)
                     }}</span>
                   </div>
-                  <div class="fine-row">
-                    <span class="fine-row-label">Hệ số phạt</span>
-                    <span class="fine-row-value"
-                      >x {{ lostBookMultiplier }}</span
-                    >
-                  </div>
                   <div class="fine-row fine-row--total">
                     <span class="fine-row-label">Tiền phạt</span>
                     <span class="fine-row-value total-amount">{{
                       formatCurrency(lostFine)
-                    }}</span>
-                  </div>
-                </div>
-
-                <!-- Damaged fine -->
-                <div
-                  v-if="returnForm.fineType === 'damaged'"
-                  class="fine-detail-box"
-                >
-                  <label class="input-label">Mức độ hư hỏng (%)</label>
-                  <input
-                    v-model.number="returnForm.damagePercent"
-                    type="range"
-                    min="10"
-                    max="80"
-                    step="10"
-                    class="damage-slider"
-                  />
-                  <div class="damage-scale">
-                    <span>10%</span><span>40%</span><span>80%</span>
-                  </div>
-                  <div class="fine-row fine-row--total mt-3">
-                    <span class="fine-row-label"
-                      >Tiền bồi thường ({{ returnForm.damagePercent }}%)</span
-                    >
-                    <span class="fine-row-value total-amount">{{
-                      formatCurrency(damageFine)
                     }}</span>
                   </div>
                 </div>
@@ -654,6 +605,12 @@
                     {{ formatCurrency(totalFine) }}
                   </span>
                 </div>
+                <p
+                  v-if="returnForm.fineType === 'lost'"
+                  class="text-xs text-red-200 mt-2"
+                >
+                  Hệ thống sẽ ghi nhận phiếu mượn ở trạng thái mất sách.
+                </p>
               </div>
             </div>
 
@@ -832,6 +789,7 @@ const StatusBadge = {
       approved: { label: "Đang mượn", cls: "badge--approved" },
       returned: { label: "Đã trả", cls: "badge--returned" },
       rejected: { label: "Từ chối", cls: "badge--rejected" },
+      lost: { label: "Mất sách", cls: "badge--overdue" },
       overdue: { label: "Quá hạn", cls: "badge--overdue" },
     };
     return {
@@ -863,7 +821,6 @@ const showExtendModal = ref(false);
 // Return form
 const returnForm = ref({
   fineType: "none",
-  damagePercent: 30,
   note: "",
 });
 
@@ -878,7 +835,6 @@ const toast = ref({ show: false, type: "success", message: "" });
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const fineRatePerDay = 5000; // VND per day late
-const lostBookMultiplier = 3; // 3x book price if lost
 
 // ─── TABS ─────────────────────────────────────────────────────────────────────
 const tabs = computed(() => [
@@ -900,15 +856,22 @@ const tabs = computed(() => [
     key: "returned",
     label: "Đã trả",
     color: "green",
-    count: 0,
+    count: borrows.value.filter((b) => b.status === "returned").length,
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>`,
   },
   {
     key: "rejected",
     label: "Từ chối",
     color: "red",
-    count: 0,
+    count: borrows.value.filter((b) => b.status === "rejected").length,
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>`,
+  },
+  {
+    key: "lost",
+    label: "Mất sách",
+    color: "red",
+    count: borrows.value.filter((b) => b.status === "lost").length,
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75c-4.97 0-9 3.022-9 6.75 0 1.498.651 2.882 1.75 4.01L3.75 21l4.146-1.381A10.66 10.66 0 0012 20.25c4.97 0 9-3.022 9-6.75s-4.03-6.75-9-6.75z" /></svg>`,
   },
 ]);
 
@@ -973,19 +936,12 @@ const computedOverdueDays = computed(() => {
 
 const lateFine = computed(() => computedOverdueDays.value * fineRatePerDay);
 const lostFine = computed(
-  () => (selectedBorrow.value?.book?.price || 0) * lostBookMultiplier,
-);
-const damageFine = computed(
-  () =>
-    ((selectedBorrow.value?.book?.price || 0) *
-      returnForm.value.damagePercent) /
-    100,
+  () => selectedBorrow.value?.book?.price || 0,
 );
 
 const totalFine = computed(() => {
   if (returnForm.value.fineType === "late") return lateFine.value;
   if (returnForm.value.fineType === "lost") return lostFine.value;
-  if (returnForm.value.fineType === "damaged") return damageFine.value;
   return 0;
 });
 
@@ -1060,7 +1016,6 @@ function openReturnModal(borrow) {
   selectedBorrow.value = borrow;
   returnForm.value = {
     fineType: isOverdue(borrow) ? "late" : "none",
-    damagePercent: 30,
     note: "",
   };
   showReturnModal.value = true;
@@ -1091,13 +1046,15 @@ async function confirmReturn() {
   isSubmitting.value = true;
   try {
     await borrowStore.returnBook(selectedBorrow.value._id, {
-      fineType: returnForm.value.fineType,
-      fineAmount: totalFine.value,
-      damagePercent: returnForm.value.damagePercent,
-      note: returnForm.value.note,
+      markAsLost: returnForm.value.fineType === "lost",
     });
     showReturnModal.value = false;
-    showToast("success", "Đã xác nhận trả sách thành công!");
+    showToast(
+      "success",
+      returnForm.value.fineType === "lost"
+        ? "Đã ghi nhận mất sách thành công!"
+        : "Đã xác nhận trả sách thành công!",
+    );
   } catch {
     showToast("error", "Có lỗi xảy ra khi xử lý trả sách");
   } finally {

@@ -88,7 +88,7 @@ const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 
-const googleLoginUrl = `${import.meta.env.VITE_API_URL || "http://localhost:3000/api"}/auth/google`;
+const googleLoginUrl = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api"}/auth/google`;
 const form = ref({ email: "", password: "" });
 const loading = ref(false);
 const error = ref("");
@@ -97,11 +97,10 @@ async function handleLogin() {
   loading.value = true;
   error.value = "";
   try {
-    const { data } = await api.post("/auth/login", form.value);
-    authStore.setAuth(data.token, data.user);
-    router.push(route.query.redirect || "/app/dashboard");
+    await authStore.login(form.value.email, form.value.password);
+    router.push(route.query.redirect || "/dashboard");
   } catch (e) {
-    error.value = e.response?.data?.message || "Email hoặc mật khẩu không đúng";
+    error.value = e.message || "Email hoặc mật khẩu không đúng";
   } finally {
     loading.value = false;
   }

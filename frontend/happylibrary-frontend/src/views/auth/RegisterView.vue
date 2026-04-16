@@ -44,10 +44,22 @@
           >Họ và tên</label
         >
         <input
-          v-model="form.name"
+          v-model="form.hoTen"
           type="text"
           required
           placeholder="Nguyễn Văn A"
+          class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white"
+        />
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1.5"
+          >Tên đăng nhập</label
+        >
+        <input
+          v-model="form.username"
+          type="text"
+          required
+          placeholder="nguyenvana"
           class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white"
         />
       </div>
@@ -106,7 +118,7 @@
     <p class="text-center text-xs text-gray-600 mt-4">
       Đã có tài khoản?
       <RouterLink
-        to="/login"
+        to="/auth/login"
         class="text-amber-600 hover:text-amber-700 font-semibold"
       >
         Đăng nhập
@@ -127,7 +139,8 @@ const authStore = useAuthStore();
 
 const googleLoginUrl = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api"}/auth/google`;
 const form = ref({
-  name: "",
+  hoTen: "",
+  username: "",
   email: "",
   password: "",
   confirmPassword: "",
@@ -139,7 +152,12 @@ async function handleRegister() {
   error.value = "";
 
   // Validate
-  if (!form.value.name || !form.value.email || !form.value.password) {
+  if (
+    !form.value.hoTen ||
+    !form.value.username ||
+    !form.value.email ||
+    !form.value.password
+  ) {
     error.value = "Vui lòng điền đầy đủ thông tin";
     return;
   }
@@ -156,19 +174,15 @@ async function handleRegister() {
 
   loading.value = true;
   try {
-    const { data } = await api.post("/auth/register", {
-      name: form.value.name,
+    await authStore.register({
+      hoTen: form.value.hoTen,
+      username: form.value.username,
       email: form.value.email,
       password: form.value.password,
     });
-
-    if (data.token) {
-      localStorage.setItem("hl_token", data.token);
-      authStore.setUser(data.user);
-      await router.push("/dashboard");
-    }
+    await router.push("/dashboard");
   } catch (err) {
-    error.value = err.response?.data?.message || "Đăng ký thất bại";
+    error.value = err.message || "Đăng ký thất bại";
   } finally {
     loading.value = false;
   }

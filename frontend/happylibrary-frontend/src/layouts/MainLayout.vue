@@ -37,7 +37,7 @@
         </div>
         <Transition name="label-fade">
           <div v-if="!isSidebarCollapsed" class="user-info">
-            <p class="user-name">{{ authStore.user?.name || "Người dùng" }}</p>
+            <p class="user-name">{{ authStore.user?.hoTen || "Người dùng" }}</p>
             <span
               class="user-role"
               :class="authStore.isAdmin ? 'role-admin' : 'role-user'"
@@ -218,7 +218,7 @@
               <span v-else>{{ userInitial }}</span>
             </div>
             <div class="header-avatar-info">
-              <p class="avatar-name">{{ authStore.user?.name }}</p>
+              <p class="avatar-name">{{ authStore.user?.hoTen }}</p>
               <p class="avatar-email">{{ authStore.user?.email }}</p>
             </div>
             <svg
@@ -314,7 +314,7 @@ const isMobileMenuOpen = ref(false);
 const isProfileDropdownOpen = ref(false);
 
 const userInitial = computed(() =>
-  (authStore.user?.name || "U").charAt(0).toUpperCase(),
+  (authStore.user?.hoTen || "U").charAt(0).toUpperCase(),
 );
 
 const pendingBorrowCount = computed(() => borrowStore.pendingCount);
@@ -371,7 +371,7 @@ function toggleNotifications() {
 
 async function handleLogout() {
   await authStore.logout();
-  router.push("/login");
+  router.push("/auth/login");
 }
 
 // Close dropdown on outside click

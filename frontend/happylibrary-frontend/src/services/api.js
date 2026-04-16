@@ -28,7 +28,7 @@ api.interceptors.response.use(
     // 401: Token hết hạn hoặc không hợp lệ → đăng xuất
     if (status === 401) {
       localStorage.removeItem("hl_token");
-      window.location.href = "/login";
+      window.location.href = "/auth/login";
     }
 
     // 403: Không có quyền

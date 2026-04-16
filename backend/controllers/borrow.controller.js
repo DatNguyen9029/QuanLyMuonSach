@@ -122,9 +122,9 @@ exports.createBorrowRequest = async (req, res) => {
 exports.updateBorrowStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { trangThai } = req.body;
+    const { trangThai, lyDoTuChoi } = req.body;
 
-    const validStatuses = ["ChoDuyet", "DangMuon", "DaTra", "MatSach"];
+    const validStatuses = ["ChoDuyet", "DangMuon", "DaTra", "MatSach", "TuChoi"];
     if (!validStatuses.includes(trangThai)) {
       return res
         .status(400)
@@ -156,9 +156,22 @@ exports.updateBorrowStatus = async (req, res) => {
       });
     }
 
+    // ── Nghiệp vụ: Từ chối phiếu đang chờ duyệt ─────────────────────────────
+    if (trangThai === "TuChoi") {
+      if (trangThaiCu !== "ChoDuyet") {
+        return res.status(400).json({
+          success: false,
+          message: "Chỉ có thể từ chối phiếu đang chờ duyệt.",
+        });
+      }
+
+      record.lyDoTuChoi = lyDoTuChoi?.trim() || "";
+    }
+
     // ── Nghiệp vụ: Chuyển sang DaTra (Cộng lại số lượng + tính phạt) ─────
     if (trangThai === "DaTra" && trangThaiCu !== "DaTra") {
       record.ngayTraThucTe = new Date();
+      record.lyDoTuChoi = "";
 
       // Cộng lại 1 đơn vị tồn kho (chỉ cộng nếu đang ở trạng thái DangMuon)
       if (trangThaiCu === "DangMuon") {
@@ -177,7 +190,12 @@ exports.updateBorrowStatus = async (req, res) => {
     // ── Nghiệp vụ: Chuyển sang MatSach (Phạt = giá sách, không cộng lại) ─
     if (trangThai === "MatSach" && trangThaiCu !== "MatSach") {
       record.tienPhat = record.book.donGia;
+      record.lyDoTuChoi = "";
       // Không cộng lại soLuongTienTai vì sách bị mất
+    }
+
+    if (trangThai === "DangMuon") {
+      record.lyDoTuChoi = "";
     }
 
     record.trangThai = trangThai;
@@ -196,6 +214,50 @@ exports.updateBorrowStatus = async (req, res) => {
       recordId: record._id,
       trangThai: record.trangThai,
     });
+
+    return res.json({ success: true, data: record });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [ADMIN] PATCH /api/borrows/:id/extend - Gia hạn phiếu mượn
+// ─────────────────────────────────────────────────────────────────────────────
+exports.extendBorrow = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { days } = req.body;
+    const extendDays = Number(days);
+
+    if (!Number.isInteger(extendDays) || extendDays <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Số ngày gia hạn phải là số nguyên dương.",
+      });
+    }
+
+    const record = await BorrowRecord.findById(id)
+      .populate("user", "hoTen email")
+      .populate("book", "tenSach tacGia hinhAnh donGia");
+
+    if (!record) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Phiếu mượn không tồn tại." });
+    }
+
+    if (record.trangThai !== "DangMuon") {
+      return res.status(400).json({
+        success: false,
+        message: "Chỉ có thể gia hạn phiếu đang mượn.",
+      });
+    }
+
+    const ngayHenTra = new Date(record.ngayHenTra);
+    ngayHenTra.setDate(ngayHenTra.getDate() + extendDays);
+    record.ngayHenTra = ngayHenTra;
+    await record.save();
 
     return res.json({ success: true, data: record });
   } catch (err) {
@@ -255,7 +317,7 @@ exports.getAllBorrows = async (req, res) => {
 
     const records = await BorrowRecord.find(filter)
       .populate("user", "hoTen email")
-      .populate("book", "tenSach tacGia hinhAnh")
+      .populate("book", "tenSach tacGia hinhAnh donGia")
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));

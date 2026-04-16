@@ -14,5 +14,6 @@ borrowRouter.patch(
   adminOnly,
   borrowCtrl.updateBorrowStatus,
 ); // Admin: đổi trạng thái
+borrowRouter.patch("/:id/extend", protect, adminOnly, borrowCtrl.extendBorrow);
 
 module.exports = borrowRouter;

@@ -34,12 +34,16 @@ const borrowRecordSchema = new mongoose.Schema(
     },
     trangThai: {
       type: String,
-      enum: ["ChoDuyet", "DangMuon", "DaTra", "MatSach"],
+      enum: ["ChoDuyet", "DangMuon", "DaTra", "MatSach", "TuChoi"],
       default: "ChoDuyet",
     },
     tienPhat: {
       type: Number,
       default: 0, // VND
+    },
+    lyDoTuChoi: {
+      type: String,
+      trim: true,
     },
   },
   { timestamps: true },

@@ -48,7 +48,7 @@
       >
         <h3 class="text-sm font-bold text-gray-700">Yêu cầu mượn gần đây</h3>
         <router-link
-          to="/app/borrows"
+          to="/borrows"
           class="text-xs text-amber-600 font-semibold hover:underline"
           >Xem tất cả →</router-link
         >
@@ -139,18 +139,28 @@ const statCards = ref([
 
 onMounted(async () => {
   try {
-    const [booksRes, borrowsRes, pendingRes, usersRes, recentRes] =
-      await Promise.all([
-        api.get("/books", { params: { limit: 1 } }),
-        api.get("/borrows", { params: { trangThai: "DangMuon", limit: 1 } }),
-        api.get("/borrows", { params: { trangThai: "ChoDuyet", limit: 1 } }),
-        api.get("/users", { params: { limit: 1 } }),
-        api.get("/borrows", { params: { limit: 5 } }),
-      ]);
+    const requests = [
+      api.get("/books", { params: { limit: 1 } }),
+      api.get("/borrows", { params: { trangThai: "DangMuon", limit: 1 } }),
+      api.get("/borrows", { params: { trangThai: "ChoDuyet", limit: 1 } }),
+      api.get("/borrows", { params: { limit: 5 } }),
+    ];
+
+    if (authStore.isAdmin) {
+      requests.splice(3, 0, api.get("/users", { params: { limit: 1 } }));
+    }
+
+    const responses = await Promise.all(requests);
+    const booksRes = responses[0];
+    const borrowsRes = responses[1];
+    const pendingRes = responses[2];
+    const usersRes = authStore.isAdmin ? responses[3] : null;
+    const recentRes = authStore.isAdmin ? responses[4] : responses[3];
+
     statCards.value[0].value = booksRes.data.total;
     statCards.value[1].value = borrowsRes.data.total;
     statCards.value[2].value = pendingRes.data.total;
-    statCards.value[3].value = usersRes.data.total;
+    statCards.value[3].value = usersRes?.data.total ?? "—";
     recentBorrows.value = recentRes.data.data;
   } catch {
     /* silent fail */

@@ -2,12 +2,12 @@
   <AppModel title="Thêm/Sửa Sách" @close="$emit('close')" @submit="handleSave">
     <div class="space-y-4">
       <div>
-        <label class="form-label">Tiêu đề</label>
+        <label class="form-label">Tên sách</label>
         <input
-          v-model="form.title"
+          v-model="form.tenSach"
           type="text"
           class="form-control"
-          placeholder="Nhập tiêu đề sách"
+          placeholder="Nhập tên sách"
         />
       </div>
 
@@ -15,38 +15,43 @@
         <div>
           <label class="form-label">Tác giả</label>
           <input
-            v-model="form.author"
+            v-model="form.tacGia"
             type="text"
             class="form-control"
             placeholder="Tác giả"
           />
         </div>
         <div>
-          <label class="form-label">ISBN</label>
+          <label class="form-label">Đơn giá</label>
           <input
-            v-model="form.isbn"
-            type="text"
+            v-model.number="form.donGia"
+            type="number"
+            min="0"
             class="form-control"
-            placeholder="ISBN"
+            placeholder="50000"
           />
         </div>
       </div>
 
       <div>
         <label class="form-label">Nhà xuất bản</label>
-        <input
-          v-model="form.publisher"
-          type="text"
-          class="form-control"
-          placeholder="Nhà xuất bản"
-        />
+        <select v-model="form.nxb" class="form-control">
+          <option value="">Chọn nhà xuất bản</option>
+          <option
+            v-for="publisher in publishers"
+            :key="publisher._id"
+            :value="publisher._id"
+          >
+            {{ publisher.tenNXB }}
+          </option>
+        </select>
       </div>
 
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="form-label">Năm xuất bản</label>
           <input
-            v-model="form.year"
+            v-model.number="form.namXuatBan"
             type="number"
             class="form-control"
             placeholder="Năm"
@@ -55,8 +60,9 @@
         <div>
           <label class="form-label">Số lượng</label>
           <input
-            v-model="form.quantity"
+            v-model.number="form.soLuongTienTai"
             type="number"
+            min="0"
             class="form-control"
             placeholder="Số lượng"
           />
@@ -64,23 +70,13 @@
       </div>
 
       <div>
-        <label class="form-label">Danh mục</label>
-        <select v-model="form.category" class="form-control">
-          <option value="">Chọn danh mục</option>
-          <option value="fiction">Văn học</option>
-          <option value="science">Khoa học</option>
-          <option value="history">Lịch sử</option>
-        </select>
-      </div>
-
-      <div>
-        <label class="form-label">Mô tả</label>
-        <textarea
-          v-model="form.description"
+        <label class="form-label">Ảnh bìa</label>
+        <input
+          v-model="form.hinhAnh"
+          type="text"
           class="form-control"
-          rows="3"
-          placeholder="Mô tả sách"
-        ></textarea>
+          placeholder="https://example.com/book-cover.jpg"
+        />
       </div>
     </div>
   </AppModel>
@@ -88,6 +84,7 @@
 
 <script setup>
 import { ref, onMounted } from "vue";
+import api from "@/services/api";
 import AppModel from "@/components/common/AppModel.vue";
 
 const props = defineProps({
@@ -95,27 +92,38 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["close", "save"]);
+const publishers = ref([]);
 
 const form = ref({
-  title: "",
-  author: "",
-  isbn: "",
-  publisher: "",
-  year: new Date().getFullYear(),
-  quantity: 0,
-  category: "",
-  description: "",
+  tenSach: "",
+  tacGia: "",
+  donGia: 0,
+  nxb: "",
+  namXuatBan: new Date().getFullYear(),
+  soLuongTienTai: 0,
+  hinhAnh: "",
 });
 
-onMounted(() => {
+onMounted(async () => {
+  const { data } = await api.get("/publishers");
+  publishers.value = data.data || [];
+
   if (props.book) {
-    form.value = { ...props.book };
+    form.value = {
+      tenSach: props.book.tenSach || "",
+      tacGia: props.book.tacGia || "",
+      donGia: props.book.donGia || 0,
+      nxb: props.book.nxb || "",
+      namXuatBan: props.book.namXuatBan || new Date().getFullYear(),
+      soLuongTienTai: props.book.soLuongTienTai || 0,
+      hinhAnh: props.book.hinhAnh || "",
+    };
   }
 });
 
 const handleSave = () => {
-  if (!form.value.title) {
-    alert("Vui lòng nhập tiêu đề sách");
+  if (!form.value.tenSach) {
+    alert("Vui lòng nhập tên sách");
     return;
   }
   emit("save", form.value);

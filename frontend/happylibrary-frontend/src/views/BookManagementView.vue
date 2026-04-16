@@ -36,12 +36,12 @@
           placeholder="Tìm kiếm sách..."
           class="form-control flex-1"
         />
-        <select v-model="selectedCategory" class="form-control w-48">
-          <option value="">Tất cả danh mục</option>
-          <option value="fiction">Văn học</option>
-          <option value="science">Khoa học</option>
-          <option value="history">Lịch sử</option>
-        </select>
+        <input
+          v-model="selectedPublisher"
+          type="text"
+          placeholder="Lọc theo NXB..."
+          class="form-control w-48"
+        />
       </div>
     </div>
 
@@ -106,21 +106,21 @@
           <tbody>
             <tr
               v-for="book in books"
-              :key="book.id"
+              :key="book._id"
               class="border-b border-gray-200 hover:bg-gray-50"
             >
-              <td class="px-4 py-3 text-sm text-gray-700">{{ book.isbn }}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">{{ book._id }}</td>
               <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                {{ book.title }}
+                {{ book.tenSach }}
               </td>
-              <td class="px-4 py-3 text-sm text-gray-700">{{ book.author }}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">{{ book.tacGia }}</td>
               <td class="px-4 py-3 text-sm text-gray-700">
-                {{ book.publisher }}
+                {{ book.tenNXB || "Chưa gán" }}
               </td>
               <td class="px-4 py-3 text-sm">
                 <AppBadge
-                  :variant="book.quantity > 0 ? 'success' : 'danger'"
-                  :text="`${book.quantity} cuốn`"
+                  :variant="book.soLuongTienTai > 0 ? 'success' : 'danger'"
+                  :text="`${book.soLuongTienTai} cuốn`"
                 />
               </td>
               <td class="px-4 py-3 space-x-2">
@@ -131,7 +131,7 @@
                   Sửa
                 </button>
                 <button
-                  @click="deleteBook(book.id)"
+                  @click="deleteBook(book._id)"
                   class="btn btn-danger text-xs"
                 >
                   Xóa
@@ -166,7 +166,7 @@ import AppBadge from "@/components/common/AppBadge.vue";
 
 const bookStore = useBookStore();
 const searchQuery = ref("");
-const selectedCategory = ref("");
+const selectedPublisher = ref("");
 const loading = ref(false);
 const showModal = ref(false);
 const editingBook = ref(null);
@@ -178,13 +178,16 @@ const books = computed(() => {
     const query = searchQuery.value.toLowerCase();
     result = result.filter(
       (book) =>
-        book.title.toLowerCase().includes(query) ||
-        book.author.toLowerCase().includes(query),
+        book.tenSach.toLowerCase().includes(query) ||
+        book.tacGia.toLowerCase().includes(query),
     );
   }
 
-  if (selectedCategory.value) {
-    result = result.filter((book) => book.category === selectedCategory.value);
+  if (selectedPublisher.value) {
+    const publisherQuery = selectedPublisher.value.toLowerCase();
+    result = result.filter((book) =>
+      (book.tenNXB || "").toLowerCase().includes(publisherQuery),
+    );
   }
 
   return result;
@@ -216,8 +219,8 @@ const closeModal = () => {
 
 const saveBook = async (bookData) => {
   try {
-    if (editingBook.value?.id) {
-      await bookStore.updateBook(editingBook.value.id, bookData);
+    if (editingBook.value?._id) {
+      await bookStore.updateBook(editingBook.value._id, bookData);
     } else {
       await bookStore.createBook(bookData);
     }

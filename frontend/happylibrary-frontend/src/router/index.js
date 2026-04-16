@@ -21,17 +21,17 @@ const routes = [
   {
     path: "/auth",
     component: AuthLayout,
-    redirect: "/login",
+    redirect: "/auth/login",
     meta: { requiresGuest: true }, // Đã đăng nhập → redirect về dashboard
     children: [
       {
-        path: "/login",
+        path: "login",
         name: "Login",
         component: LoginView,
         meta: { title: "Đăng nhập | Happy Library" },
       },
       {
-        path: "/register",
+        path: "register",
         name: "Register",
         component: RegisterView,
         meta: { title: "Đăng ký | Happy Library" },

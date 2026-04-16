@@ -74,23 +74,18 @@ onMounted(async () => {
   }, 30000);
 
   try {
-    // Đợi cho đến khi auth store hoàn tất loading
-    // Hoặc thực hiện xác thực OAuth ở đây
     const searchParams = new URLSearchParams(window.location.search);
-    const code = searchParams.get("code");
-    const state = searchParams.get("state");
+    const token = searchParams.get("token");
 
-    if (code) {
-      // Xử lý OAuth callback
-      // await authStore.handleOAuthCallback(code, state);
-      // Tạm thời redirect về dashboard
+    if (token) {
+      await authStore.handleOAuthCallback(token);
       router.replace("/dashboard");
     } else {
-      router.replace("/dashboard");
+      router.replace("/auth/login");
     }
   } catch (error) {
     console.error("OAuth callback error:", error);
-    router.replace("/login");
+    router.replace("/auth/login");
   } finally {
     clearTimeout(timeoutId);
   }

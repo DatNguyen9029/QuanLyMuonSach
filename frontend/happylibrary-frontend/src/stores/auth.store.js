@@ -19,8 +19,8 @@ export const useAuthStore = defineStore("auth", () => {
    */
   async function login(email, password) {
     const { data } = await api.post("/auth/login", { email, password });
-    setAuth(data.token, data.user);
-    return data;
+    setAuth(data.data.token, data.data.user);
+    return data.data;
   }
 
   /**
@@ -28,8 +28,8 @@ export const useAuthStore = defineStore("auth", () => {
    */
   async function register(payload) {
     const { data } = await api.post("/auth/register", payload);
-    setAuth(data.token, data.user);
-    return data;
+    setAuth(data.data.token, data.data.user);
+    return data.data;
   }
 
   /**
@@ -53,19 +53,14 @@ export const useAuthStore = defineStore("auth", () => {
    */
   async function fetchCurrentUser() {
     const { data } = await api.get("/auth/me");
-    user.value = data.user;
-    return data.user;
+    user.value = data.data;
+    return data.data;
   }
 
   /**
    * Đăng xuất
    */
   async function logout() {
-    try {
-      await api.post("/auth/logout");
-    } catch (_) {
-      /* ignore */
-    }
     clearAuth();
   }
 
@@ -101,6 +96,8 @@ export const useAuthStore = defineStore("auth", () => {
     handleOAuthCallback,
     fetchCurrentUser,
     logout,
+    setAuth,
+    setToken,
     clearAuth,
   };
 });

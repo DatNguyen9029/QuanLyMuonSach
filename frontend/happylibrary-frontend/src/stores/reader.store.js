@@ -3,6 +3,19 @@ import { ref, computed } from "vue";
 import api from "@/services/api";
 
 export const useReaderStore = defineStore("reader", () => {
+  const normalizeReader = (reader) => ({
+    _id: reader._id,
+    username: reader.username || "",
+    email: reader.email || "",
+    hoTen: reader.hoTen || "",
+    dienThoai: reader.dienThoai || "",
+    ngaySinh: reader.ngaySinh || "",
+    phai: reader.phai || "",
+    diaChi: reader.diaChi || "",
+    role: reader.role || "user",
+    createdAt: reader.createdAt,
+  });
+
   // State
   const readers = ref([]);
   const isLoading = ref(false);
@@ -17,7 +30,7 @@ export const useReaderStore = defineStore("reader", () => {
     error.value = null;
     try {
       const { data } = await api.get("/users", { params });
-      readers.value = data.data || data;
+      readers.value = (data.data || []).map(normalizeReader);
     } catch (err) {
       error.value = err.message;
     } finally {
@@ -30,8 +43,9 @@ export const useReaderStore = defineStore("reader", () => {
     error.value = null;
     try {
       const { data } = await api.post("/users", readerData);
-      readers.value.push(data);
-      return data;
+      const createdReader = normalizeReader(data.data);
+      readers.value.unshift(createdReader);
+      return createdReader;
     } catch (err) {
       error.value = err.message;
       throw err;
@@ -45,11 +59,12 @@ export const useReaderStore = defineStore("reader", () => {
     error.value = null;
     try {
       const { data } = await api.put(`/users/${readerId}`, readerData);
-      const index = readers.value.findIndex((r) => r.id === readerId);
+      const updatedReader = normalizeReader(data.data);
+      const index = readers.value.findIndex((r) => r._id === readerId);
       if (index > -1) {
-        readers.value[index] = data;
+        readers.value[index] = updatedReader;
       }
-      return data;
+      return updatedReader;
     } catch (err) {
       error.value = err.message;
       throw err;
@@ -63,7 +78,7 @@ export const useReaderStore = defineStore("reader", () => {
     error.value = null;
     try {
       await api.delete(`/users/${readerId}`);
-      readers.value = readers.value.filter((r) => r.id !== readerId);
+      readers.value = readers.value.filter((r) => r._id !== readerId);
     } catch (err) {
       error.value = err.message;
       throw err;

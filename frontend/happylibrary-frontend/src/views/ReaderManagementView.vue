@@ -1,12 +1,9 @@
 <template>
   <div class="container mx-auto px-4 py-6">
-    <!-- Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-3xl font-bold text-gray-900">Quản lý Độc giả</h1>
-        <p class="text-gray-600">
-          Quản lý danh sách độc giả / thành viên thư viện
-        </p>
+        <p class="text-gray-600">Quản lý tài khoản độc giả trong hệ thống</p>
       </div>
       <button
         @click="openCreateModal"
@@ -29,27 +26,23 @@
       </button>
     </div>
 
-    <!-- Search & Filter -->
     <div class="mb-6 space-y-4">
       <div class="flex gap-4">
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="Tìm kiếm độc giả..."
+          placeholder="Tìm theo họ tên, username, email, số điện thoại..."
           class="form-control flex-1"
         />
-        <select v-model="selectedStatus" class="form-control w-48">
-          <option value="">Tất cả trạng thái</option>
-          <option value="active">Hoạt động</option>
-          <option value="inactive">Không hoạt động</option>
-          <option value="suspended">Tạm khóa</option>
+        <select v-model="selectedRole" class="form-control w-48">
+          <option value="">Tất cả vai trò</option>
+          <option value="user">Độc giả</option>
+          <option value="admin">Admin</option>
         </select>
       </div>
     </div>
 
-    <!-- Readers Table -->
     <div class="card">
-      <!-- Loading state -->
       <div v-if="loading" class="flex items-center justify-center py-8">
         <div class="animate-spin">
           <svg
@@ -68,44 +61,32 @@
         </div>
       </div>
 
-      <!-- Readers list -->
       <div v-else class="overflow-x-auto">
         <table class="w-full table-auto">
           <thead>
             <tr class="border-b border-gray-200">
-              <th
-                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
-              >
+              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                 ID
               </th>
-              <th
-                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
-              >
+              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                 Họ tên
               </th>
-              <th
-                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
-              >
+              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                Username
+              </th>
+              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                 Email
               </th>
-              <th
-                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
-              >
+              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                 Điện thoại
               </th>
-              <th
-                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
-              >
-                Trạng thái
+              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
+                Vai trò
               </th>
-              <th
-                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
-              >
+              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                 Ngày tham gia
               </th>
-              <th
-                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
-              >
+              <th class="px-4 py-3 text-left text-sm font-semibold text-gray-600">
                 Hành động
               </th>
             </tr>
@@ -113,35 +94,36 @@
           <tbody>
             <tr
               v-for="reader in filteredReaders"
-              :key="reader.id"
+              :key="reader._id"
               class="border-b border-gray-200 hover:bg-gray-50"
             >
-              <td class="px-4 py-3 text-sm text-gray-700">{{ reader.id }}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">{{ reader._id }}</td>
               <td class="px-4 py-3 text-sm font-medium text-gray-900">
-                {{ reader.name }}
+                {{ reader.hoTen }}
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-700">
+                {{ reader.username }}
               </td>
               <td class="px-4 py-3 text-sm text-gray-700">
                 {{ reader.email }}
               </td>
               <td class="px-4 py-3 text-sm text-gray-700">
-                {{ reader.phone }}
+                {{ reader.dienThoai || "—" }}
               </td>
               <td class="px-4 py-3 text-sm">
                 <span
                   class="inline-flex px-3 py-1 text-xs font-semibold rounded-full"
-                  :class="{
-                    'bg-success-100 text-success-800':
-                      reader.status === 'active',
-                    'bg-gray-100 text-gray-800': reader.status === 'inactive',
-                    'bg-danger-100 text-danger-800':
-                      reader.status === 'suspended',
-                  }"
+                  :class="
+                    reader.role === 'admin'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-blue-100 text-blue-800'
+                  "
                 >
-                  {{ statusLabel(reader.status) }}
+                  {{ reader.role === "admin" ? "Admin" : "Độc giả" }}
                 </span>
               </td>
               <td class="px-4 py-3 text-sm text-gray-700">
-                {{ formatDate(reader.joinDate) }}
+                {{ formatDate(reader.createdAt) }}
               </td>
               <td class="px-4 py-3 space-x-2">
                 <button
@@ -151,7 +133,7 @@
                   Sửa
                 </button>
                 <button
-                  @click="deleteReader(reader.id)"
+                  @click="removeReader(reader._id)"
                   class="btn btn-danger text-xs"
                 >
                   Xóa
@@ -161,7 +143,6 @@
           </tbody>
         </table>
 
-        <!-- Empty state -->
         <div
           v-if="filteredReaders.length === 0"
           class="py-8 text-center text-gray-500"
@@ -171,99 +152,212 @@
       </div>
     </div>
 
-    <!-- Reader Form Modal (if needed) -->
-    <!-- Add modal component here -->
+    <Teleport to="body">
+      <div
+        v-if="showModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      >
+        <AppModel
+          :title="editingReader ? 'Cập nhật độc giả' : 'Thêm độc giả'"
+          @close="closeModal"
+          @submit="saveReader"
+        >
+          <div class="space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="form-label">Họ tên</label>
+                <input v-model="form.hoTen" class="form-control" type="text" />
+              </div>
+              <div>
+                <label class="form-label">Username</label>
+                <input
+                  v-model="form.username"
+                  class="form-control"
+                  type="text"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="form-label">Email</label>
+                <input v-model="form.email" class="form-control" type="email" />
+              </div>
+              <div>
+                <label class="form-label">Số điện thoại</label>
+                <input
+                  v-model="form.dienThoai"
+                  class="form-control"
+                  type="text"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="form-label">Ngày sinh</label>
+                <input
+                  v-model="form.ngaySinh"
+                  class="form-control"
+                  type="date"
+                />
+              </div>
+              <div>
+                <label class="form-label">Giới tính</label>
+                <select v-model="form.phai" class="form-control">
+                  <option value="">Chọn giới tính</option>
+                  <option value="Nam">Nam</option>
+                  <option value="Nữ">Nữ</option>
+                  <option value="Khác">Khác</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="form-label">Địa chỉ</label>
+              <input v-model="form.diaChi" class="form-control" type="text" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="form-label">Vai trò</label>
+                <select v-model="form.role" class="form-control">
+                  <option value="user">Độc giả</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label class="form-label">
+                  {{ editingReader ? "Mật khẩu mới (tuỳ chọn)" : "Mật khẩu" }}
+                </label>
+                <input
+                  v-model="form.password"
+                  class="form-control"
+                  type="password"
+                />
+              </div>
+            </div>
+          </div>
+        </AppModel>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
+import { useReaderStore } from "@/stores/reader.store";
+import AppModel from "@/components/common/AppModel.vue";
 
+const readerStore = useReaderStore();
 const searchQuery = ref("");
-const selectedStatus = ref("");
+const selectedRole = ref("");
 const loading = ref(false);
-const readers = ref([]);
+const showModal = ref(false);
+const editingReader = ref(null);
+const form = ref(createDefaultForm());
+
+function createDefaultForm() {
+  return {
+    username: "",
+    email: "",
+    password: "",
+    hoTen: "",
+    dienThoai: "",
+    ngaySinh: "",
+    phai: "",
+    diaChi: "",
+    role: "user",
+  };
+}
 
 onMounted(async () => {
   loading.value = true;
   try {
-    // Mock data
-    readers.value = [
-      {
-        id: "RD-001",
-        name: "Nguyễn Văn A",
-        email: "nguyenvana@example.com",
-        phone: "0901234567",
-        status: "active",
-        joinDate: new Date("2024-01-15"),
-      },
-      {
-        id: "RD-002",
-        name: "Trần Thị B",
-        email: "tranthib@example.com",
-        phone: "0912345678",
-        status: "active",
-        joinDate: new Date("2024-02-20"),
-      },
-      {
-        id: "RD-003",
-        name: "Lê Văn C",
-        email: "levanc@example.com",
-        phone: "0923456789",
-        status: "inactive",
-        joinDate: new Date("2024-03-10"),
-      },
-    ];
+    await readerStore.fetchReaders();
   } finally {
     loading.value = false;
   }
 });
 
 const filteredReaders = computed(() => {
-  let result = readers.value;
+  let result = readerStore.readers;
 
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
     result = result.filter(
       (reader) =>
-        reader.name.toLowerCase().includes(query) ||
+        reader.hoTen.toLowerCase().includes(query) ||
+        reader.username.toLowerCase().includes(query) ||
         reader.email.toLowerCase().includes(query) ||
-        reader.phone.includes(query),
+        (reader.dienThoai || "").includes(query),
     );
   }
 
-  if (selectedStatus.value) {
-    result = result.filter((reader) => reader.status === selectedStatus.value);
+  if (selectedRole.value) {
+    result = result.filter((reader) => reader.role === selectedRole.value);
   }
 
   return result;
 });
 
-const statusLabel = (status) => {
-  const labels = {
-    active: "Hoạt động",
-    inactive: "Không hoạt động",
-    suspended: "Tạm khóa",
-  };
-  return labels[status] || status;
-};
-
-const formatDate = (date) => {
-  return new Date(date).toLocaleDateString("vi-VN");
-};
+const formatDate = (date) =>
+  date ? new Date(date).toLocaleDateString("vi-VN") : "—";
 
 const openCreateModal = () => {
-  // TODO: Implement modal
+  editingReader.value = null;
+  form.value = createDefaultForm();
+  showModal.value = true;
+};
+
+const closeModal = () => {
+  showModal.value = false;
+  editingReader.value = null;
+  form.value = createDefaultForm();
 };
 
 const editReader = (reader) => {
-  console.log("Edit reader:", reader);
-  // TODO: Implement edit functionality
+  editingReader.value = reader;
+  form.value = {
+    username: reader.username,
+    email: reader.email,
+    password: "",
+    hoTen: reader.hoTen,
+    dienThoai: reader.dienThoai || "",
+    ngaySinh: reader.ngaySinh ? reader.ngaySinh.slice(0, 10) : "",
+    phai: reader.phai || "",
+    diaChi: reader.diaChi || "",
+    role: reader.role || "user",
+  };
+  showModal.value = true;
 };
 
-const deleteReader = (readerId) => {
-  if (confirm("Bạn chắc chắn muốn xóa độc giả này?")) {
-    readers.value = readers.value.filter((r) => r.id !== readerId);
+const saveReader = async () => {
+  const payload = { ...form.value };
+
+  if (!payload.password) {
+    delete payload.password;
+  }
+
+  try {
+    if (editingReader.value?._id) {
+      await readerStore.updateReader(editingReader.value._id, payload);
+    } else {
+      await readerStore.createReader(payload);
+    }
+    closeModal();
+  } catch (error) {
+    alert(error.message || "Không thể lưu độc giả");
+  }
+};
+
+const removeReader = async (readerId) => {
+  if (!confirm("Bạn chắc chắn muốn xóa độc giả này?")) return;
+
+  try {
+    await readerStore.deleteReader(readerId);
+  } catch (error) {
+    alert(error.message || "Không thể xóa độc giả");
   }
 };
 </script>
