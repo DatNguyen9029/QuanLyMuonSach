@@ -218,6 +218,16 @@ exports.getBorrowDetail = async (req, res) => {
         .json({ success: false, message: "Phiếu mượn không tồn tại." });
     }
 
+    const isAdmin = req.user.role === "admin";
+    const isOwner = String(record.user._id) === String(req.user._id);
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "Bạn không có quyền xem phiếu mượn này.",
+      });
+    }
+
     // Tính tiền phạt tạm tính (nếu đang mượn mà quá hạn)
     const tienPhatTamTinh = tinhTienPhat(record);
 

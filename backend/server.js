@@ -10,6 +10,7 @@ const cors = require("cors");
 const passport = require("passport");
 const { Server } = require("socket.io");
 const config = require("./config");
+const { seedAdminAccount } = require("./utils/seedAdmin.util");
 
 // ─── Import Routes ───────────────────────────────────────────────────────────
 const authRoutes = require("./routes/auth.routes");
@@ -102,6 +103,10 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log("[MongoDB] Connected successfully");
+    return seedAdminAccount();
+  })
+  .then(() => {
+    console.log("[Seed] Admin sample account is ready: admin / admin@123");
     server.listen(PORT, () => {
       console.log(`[Server] Happy Library running on http://localhost:${PORT}`);
     });

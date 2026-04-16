@@ -4,6 +4,8 @@
 
 const jwt = require("jsonwebtoken");
 const config = require("../config");
+const User = require("../models/User.model");
+const { hashPassword, verifyPassword } = require("../utils/password.util");
 
 function generateToken(user) {
   return jwt.sign(
@@ -12,6 +14,104 @@ function generateToken(user) {
     { expiresIn: config.jwt.expiresIn },
   );
 }
+
+exports.register = async (req, res) => {
+  try {
+    const { username, email, password, hoTen } = req.body;
+
+    if (!username || !email || !password || !hoTen) {
+      return res.status(400).json({
+        success: false,
+        message: "username, email, password và hoTen là bắt buộc.",
+      });
+    }
+
+    const normalizedUsername = username.trim().toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingUser = await User.findOne({
+      $or: [{ username: normalizedUsername }, { email: normalizedEmail }],
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "Tên đăng nhập hoặc email đã tồn tại.",
+      });
+    }
+
+    const user = await User.create({
+      username: normalizedUsername,
+      email: normalizedEmail,
+      passwordHash: hashPassword(password),
+      hoTen: hoTen.trim(),
+      role: "user",
+    });
+
+    const token = generateToken(user);
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        token,
+        user: {
+          _id: user._id,
+          username: user.username,
+          email: user.email,
+          hoTen: user.hoTen,
+          role: user.role,
+          avatar: user.avatar,
+        },
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.login = async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+    const identifier = username?.trim().toLowerCase() || email?.trim().toLowerCase();
+
+    if (!identifier || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Bạn cần cung cấp username hoặc email, cùng với password.",
+      });
+    }
+
+    const user = await User.findOne({
+      $or: [{ username: identifier }, { email: identifier }],
+    }).select("+passwordHash");
+
+    if (!user || !verifyPassword(password, user.passwordHash)) {
+      return res.status(401).json({
+        success: false,
+        message: "Sai thông tin đăng nhập.",
+      });
+    }
+
+    const token = generateToken(user);
+
+    return res.json({
+      success: true,
+      data: {
+        token,
+        user: {
+          _id: user._id,
+          username: user.username,
+          email: user.email,
+          hoTen: user.hoTen,
+          role: user.role,
+          avatar: user.avatar,
+        },
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/auth/google/callback - Callback sau khi Google OAuth thành công

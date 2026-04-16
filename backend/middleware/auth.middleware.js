@@ -19,7 +19,7 @@ exports.protect = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, config.jwt.secret);
 
-    const user = await User.findById(decoded.id).select("-googleId");
+    const user = await User.findById(decoded.id).select("-googleId -passwordHash");
     if (!user) {
       return res
         .status(401)
