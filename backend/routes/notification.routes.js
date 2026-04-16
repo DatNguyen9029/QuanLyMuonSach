@@ -17,11 +17,11 @@ router.get("/", notificationController.getUserNotifications);
 // GET /api/notifications/unread-count - Số thông báo chưa đọc
 router.get("/unread-count", notificationController.getUnreadCount);
 
-// PATCH /api/notifications/:id/read - Đánh dấu đọc 1 thông báo
-router.patch("/:id/read", notificationController.markAsRead);
-
 // PATCH /api/notifications/read-all - Đánh dấu đọc tất cả
 router.patch("/read-all", notificationController.markAllAsRead);
+
+// PATCH /api/notifications/:id/read - Đánh dấu đọc 1 thông báo
+router.patch("/:id/read", notificationController.markAsRead);
 
 // ─── ADMIN ONLY ──────────────────────────────────────────────────────────────
 router.use(authMiddleware.adminOnly);

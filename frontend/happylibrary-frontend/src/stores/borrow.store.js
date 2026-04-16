@@ -70,37 +70,34 @@ export const useBorrowStore = defineStore("borrow", () => {
   /**
    * Lấy danh sách phiếu mươn theo status + phân trang
    */
-  async function fetchBorrows({
-    status = "pending",
-    page = 1,
-    limit = 10,
-    search = "",
-  } = {}) {
+  async function fetchBorrows(params = {}) {
     isLoading.value = true;
     try {
-      const { data } = await api.get("/borrows", {
-        params: {
-          trangThai: statusMap[status] || undefined,
-          page,
-          limit,
-        },
-      });
-      const normalized = (data.data || []).map(normalizeBorrow);
-      borrows.value = search
-        ? normalized.filter((borrow) => {
-            const query = search.toLowerCase();
-            return (
-              borrow.reader?.name?.toLowerCase().includes(query) ||
-              borrow.book?.title?.toLowerCase().includes(query) ||
-              borrow.borrowCode.toLowerCase().includes(query)
-            );
-          })
-        : normalized;
-      pagination.value = {
-        page: data.page || page,
-        totalPages: Math.max(1, Math.ceil((data.total || 0) / limit)),
-        total: data.total || 0,
+      const { data } = await api.get("/borrows", { params });
+      borrows.value = (data.data || []).map(normalizeBorrow);
+      pagination.value = data.pagination || {
+        page: 1,
+        totalPages: 1,
+        total: 0,
       };
+      return data;
+    } catch (err) {
+      // Log lỗi để debug nhưng không làm crash app
+      console.error("Fetch borrows error:", err.message);
+      throw err; // Ném lại để Component có thể hiển thị thông báo nếu cần
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  // Làm tương tự cho fetchMyBorrows
+  async function fetchMyBorrows() {
+    isLoading.value = true;
+    try {
+      const { data } = await api.get("/borrows/my");
+      borrows.value = (data.data || []).map(normalizeBorrow);
+    } catch (err) {
+      console.error("Fetch my borrows error:", err.message);
     } finally {
       isLoading.value = false;
     }
@@ -144,10 +141,7 @@ export const useBorrowStore = defineStore("borrow", () => {
   /**
    * Xác nhận trả sách
    */
-  async function returnBook(
-    borrowId,
-    { markAsLost = false },
-  ) {
+  async function returnBook(borrowId, { markAsLost = false }) {
     const { data } = await api.patch(`/borrows/${borrowId}/status`, {
       trangThai: markAsLost ? "MatSach" : "DaTra",
     });

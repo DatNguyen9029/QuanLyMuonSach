@@ -60,20 +60,20 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    // Lấy thông báo lỗi từ Server nếu có, nếu không thì dùng mặc định
+    const serverMessage = error.response?.data?.message;
     const status = error.response?.status;
-    const shouldRedirectOnForbidden = error.config?.redirectOnForbidden;
 
     if (status === 401) {
       localStorage.removeItem("hl_token");
-      window.location.href = "/auth/login";
+      window.location.href = "/login";
     }
 
-    if (status === 403 && shouldRedirectOnForbidden) {
-      window.location.href = "/403";
-    }
+    // Quan trọng: Trả về message cụ thể để Store có thể bắt được
+    const finalError = new Error(serverMessage || "Đã có lỗi xảy ra");
+    finalError.status = status;
 
-    const message = error.response?.data?.message || "Đã có lỗi xảy ra";
-    return Promise.reject(new Error(message));
+    return Promise.reject(finalError);
   },
 );
 

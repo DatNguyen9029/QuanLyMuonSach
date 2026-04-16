@@ -20,34 +20,106 @@ async function getBookCountForPublisher(publisher) {
 }
 
 async function syncLegacyPublishers() {
-  const legacyNames = await Book.distinct("tenNXB", {
-    $and: [
-      { tenNXB: { $exists: true, $nin: ["", null] } },
-      { $or: [{ nxb: null }, { nxb: { $exists: false } }] },
-    ],
+  // 1. Lấy danh sách NXB chưa sync
+  const legacyNamesRaw = await Book.distinct("tenNXB", {
+    tenNXB: { $exists: true, $nin: ["", null] },
+    $or: [{ nxb: null }, { nxb: { $exists: false } }],
   });
 
-  for (const legacyName of legacyNames.map((name) => name.trim()).filter(Boolean)) {
-    let publisher = await Publisher.findOne({
-      tenNXB: { $regex: `^${legacyName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
-    });
+  const legacyNames = [
+    ...new Set(legacyNamesRaw.map((n) => n?.trim()).filter(Boolean)),
+  ];
 
+  if (legacyNames.length === 0) return;
+
+  console.log(`[Sync] ${legacyNames.length} NXB cần đồng bộ`);
+
+  // 2. Escape regex an toàn
+  const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  // 3. Tìm tất cả publisher đã tồn tại (1 query duy nhất)
+  const regexQueries = legacyNames.map((name) => ({
+    tenNXB: { $regex: `^${escapeRegex(name)}$`, $options: "i" },
+  }));
+
+  const existingPublishers = await Publisher.find({
+    $or: regexQueries,
+  }).lean();
+
+  // Map để lookup nhanh (lowercase)
+  const publisherMap = new Map(
+    existingPublishers.map((p) => [p.tenNXB.toLowerCase(), p]),
+  );
+
+  const bulkInsertOps = [];
+  const bulkUpdateBooksOps = [];
+
+  for (const name of legacyNames) {
+    const key = name.toLowerCase();
+    let publisher = publisherMap.get(key);
+
+    // 4. Nếu chưa tồn tại → chuẩn bị insert
     if (!publisher) {
-      publisher = await Publisher.create({
-        maNXB: await generateNextPublisherCode(),
-        tenNXB: legacyName,
-        diaChi: "",
-      });
-    }
+      const nextCode = await generateNextPublisherCode();
 
-    await Book.updateMany(
-      {
-        tenNXB: legacyName,
-        $or: [{ nxb: null }, { nxb: { $exists: false } }],
-      },
-      { nxb: publisher._id, tenNXB: publisher.tenNXB },
-    );
+      const newPublisher = {
+        maNXB: nextCode,
+        tenNXB: name,
+        diaChi: "",
+      };
+
+      bulkInsertOps.push({
+        insertOne: { document: newPublisher },
+      });
+
+      // Tạm thời push vào map để tránh duplicate trong cùng batch
+      publisherMap.set(key, newPublisher);
+    }
   }
+
+  // 5. Insert hàng loạt (nếu có)
+  if (bulkInsertOps.length > 0) {
+    const insertResult = await Publisher.bulkWrite(bulkInsertOps);
+
+    console.log(`[Sync] Đã tạo ${insertResult.insertedCount} NXB mới`);
+
+    // Reload lại publisher để có _id
+    const allPublishers = await Publisher.find({
+      $or: regexQueries,
+    }).lean();
+
+    allPublishers.forEach((p) => {
+      publisherMap.set(p.tenNXB.toLowerCase(), p);
+    });
+  }
+
+  // 6. Chuẩn bị update Books (bulk)
+  for (const name of legacyNames) {
+    const publisher = publisherMap.get(name.toLowerCase());
+    if (!publisher) continue;
+
+    bulkUpdateBooksOps.push({
+      updateMany: {
+        filter: {
+          tenNXB: name,
+          $or: [{ nxb: null }, { nxb: { $exists: false } }],
+        },
+        update: {
+          nxb: publisher._id,
+          tenNXB: publisher.tenNXB,
+        },
+      },
+    });
+  }
+
+  // 7. Update hàng loạt
+  if (bulkUpdateBooksOps.length > 0) {
+    const updateResult = await Book.bulkWrite(bulkUpdateBooksOps);
+
+    console.log(`[Sync] Updated ${updateResult.modifiedCount} books`);
+  }
+
+  console.log("[Sync] Hoàn tất");
 }
 
 exports.getAll = async (req, res) => {
