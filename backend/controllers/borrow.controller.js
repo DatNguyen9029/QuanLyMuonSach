@@ -1,118 +1,124 @@
-/**
- * Borrow Controller - Nghiệp vụ Mượn/Trả Sách (Happy Library)
- *
- * Các nghiệp vụ quan trọng:
- *  1. Giới hạn mượn tối đa 3 cuốn (ChoDuyet + DangMuon)
- *  2. Trừ soLuongTienTai khi ChoDuyet → DangMuon
- *  3. Cộng soLuongTienTai khi → DaTra
- *  4. Tự động tính tiền phạt (trễ hạn / mất sách)
- *  5. Emit Socket.io để VueJS cập nhật UI real-time
- */
-
+//eslint-disable-next-line no-unused-vars
+const mongoose = require("mongoose");
 const BorrowRecord = require("../models/BorrowRecord.model");
 const Book = require("../models/Book.model");
 const User = require("../models/User.model");
 const Notification = require("../models/Notification.model");
 
-// ─── Hằng số nghiệp vụ ────────────────────────────────────────────────────────
-const MAX_BORROW_LIMIT = 3; // Số sách tối đa được mượn cùng lúc
-const FINE_PER_DAY = 10000; // Tiền phạt mỗi ngày trễ: 10.000 VND
+const BORROW_STATUS = {
+  PENDING: "ChoDuyet",
+  BORROWING: "DangMuon",
+  RETURNED: "DaTra",
+  REJECTED: "TuChoi",
+  LOST: "MatSach",
+};
+
+const MAX_BORROW_LIMIT = 3;
+const FINE_PER_DAY = 10000;
 
 const BORROW_POPULATE = [
-  { path: "user", select: "hoTen email dienThoai" },
-  { path: "book", select: "tenSach tacGia hinhAnh donGia soLuongTienTai" },
+  { path: "user", select: "hoTen email dienThoai role avatar" },
+  {
+    path: "book",
+    select: "tenSach tacGia hinhAnh donGia soLuongTienTai tenNXB",
+  },
 ];
 
-/**
- * Hàm tiện ích: Tính tiền phạt cho một BorrowRecord
- *
- * Logic:
- *  - Nếu trạng thái 'MatSach' → phạt = donGia sách (giá trị tham chiếu)
- *  - Nếu ngày trả thực tế (hoặc hôm nay) > ngayHenTra → phạt theo số ngày trễ
- *  - Còn lại → 0 đồng
- *
- * @param {Object} record  - BorrowRecord document (đã populate book)
- * @returns {number} tiền phạt (VND)
- */
-function tinhTienPhat(record) {
-  // ── Trường hợp 1: Mất sách ───────────────────────────────────────────────
-  if (record.trangThai === "MatSach") {
-    return record.book.donGia; // Phạt đúng bằng giá sách
+function isAdmin(req) {
+  return req.user?.role === "admin";
+}
+
+function isReader(req) {
+  return req.user?.role === "user";
+}
+
+function normalizeDateOnly(d) {
+  const date = new Date(d);
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function calculateFine(record) {
+  if (!record) return 0;
+
+  if (record.trangThai === BORROW_STATUS.LOST) {
+    return Number(record.book?.donGia || 0);
   }
 
-  // ── Trường hợp 2: Kiểm tra trễ hạn ──────────────────────────────────────
-  // Dùng ngày trả thực tế nếu đã trả, còn không dùng ngày hôm nay để tính "tạm tính"
-  const ngayKiemTra = record.ngayTraThucTe
+  const dueDate = new Date(record.ngayHenTra);
+  const compareDate = record.ngayTraThucTe
     ? new Date(record.ngayTraThucTe)
     : new Date();
 
-  const ngayHenTra = new Date(record.ngayHenTra);
+  const diff = normalizeDateOnly(compareDate) - normalizeDateOnly(dueDate);
+  if (diff <= 0) return 0;
 
-  // So sánh chỉ theo ngày (bỏ giờ/phút/giây để tránh sai lệch)
-  const msKiemTra = Date.UTC(
-    ngayKiemTra.getFullYear(),
-    ngayKiemTra.getMonth(),
-    ngayKiemTra.getDate(),
-  );
-  const msHenTra = Date.UTC(
-    ngayHenTra.getFullYear(),
-    ngayHenTra.getMonth(),
-    ngayHenTra.getDate(),
-  );
-
-  const msDiff = msKiemTra - msHenTra;
-
-  if (msDiff > 0) {
-    // Tính số ngày trễ (làm tròn lên để không bỏ sót ngày lẻ)
-    const soNgayTre = Math.ceil(msDiff / (1000 * 60 * 60 * 24));
-    return soNgayTre * FINE_PER_DAY; // 10.000 VND × số ngày trễ
-  }
-
-  return 0; // Không phạt
+  const overdueDays = Math.ceil(diff / (1000 * 60 * 60 * 24));
+  return overdueDays * FINE_PER_DAY;
 }
 
-function gopSachTrung(items = []) {
-  const grouped = new Map();
+function getOverdueDays(record) {
+  if (!record) return 0;
+  if (record.trangThai !== BORROW_STATUS.BORROWING) return 0;
+  const diff =
+    normalizeDateOnly(new Date()) - normalizeDateOnly(record.ngayHenTra);
+  if (diff <= 0) return 0;
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+function toClientBorrow(record) {
+  const obj =
+    typeof record.toObject === "function" ? record.toObject() : record;
+  const overdueDays = getOverdueDays(obj);
+  const isOverdue =
+    obj.trangThai === BORROW_STATUS.BORROWING && overdueDays > 0;
+
+  return {
+    ...obj,
+    isOverdue,
+    overdueDays,
+    displayStatus: isOverdue ? "QuaHan" : obj.trangThai,
+    tienPhatTamTinh:
+      obj.trangThai === BORROW_STATUS.BORROWING
+        ? calculateFine(obj)
+        : obj.tienPhat || 0,
+  };
+}
+
+function sanitizeItems(items = []) {
+  const map = new Map();
 
   for (const item of items) {
-    const bookId = item.bookId?.trim();
+    const bookId = String(item.bookId || "").trim();
     const quantity = Number(item.quantity || 0);
-
-    if (!bookId || !Number.isInteger(quantity) || quantity <= 0) {
-      continue;
-    }
-
-    grouped.set(bookId, (grouped.get(bookId) || 0) + quantity);
+    if (!bookId || !Number.isInteger(quantity) || quantity <= 0) continue;
+    map.set(bookId, (map.get(bookId) || 0) + quantity);
   }
 
-  return Array.from(grouped.entries()).map(([bookId, quantity]) => ({
-    bookId,
-    quantity,
-  }));
+  return [...map.entries()].map(([bookId, quantity]) => ({ bookId, quantity }));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [USER] POST /api/borrows - Tạo yêu cầu mượn sách
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * [USER] POST /api/borrows
+ * Reader tạo phiếu mượn của chính họ.
+ */
 exports.createBorrowRequest = async (req, res) => {
   try {
-    const { bookId, ngayHenTra } = req.body;
+    if (!isReader(req) && !isAdmin(req)) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Không có quyền tạo phiếu mượn." });
+    }
+
+    const { bookId, ngayHenTra, ghiChu = "" } = req.body;
     const userId = req.user._id;
 
-    // ── Kiểm tra 1: Giới hạn số sách đang mượn ───────────────────────────
-    const soSachDangMuon = await BorrowRecord.countDocuments({
-      user: userId,
-      trangThai: { $in: ["ChoDuyet", "DangMuon"] },
-    });
-
-    if (soSachDangMuon >= MAX_BORROW_LIMIT) {
+    if (!bookId || !ngayHenTra) {
       return res.status(400).json({
         success: false,
-        message: `Bạn đang mượn ${soSachDangMuon} cuốn. Giới hạn tối đa là ${MAX_BORROW_LIMIT} cuốn cùng lúc.`,
+        message: "bookId và ngayHenTra là bắt buộc.",
       });
     }
 
-    // ── Kiểm tra 2: Sách có tồn tại không ───────────────────────────────
     const book = await Book.findById(bookId);
     if (!book) {
       return res
@@ -120,65 +126,83 @@ exports.createBorrowRequest = async (req, res) => {
         .json({ success: false, message: "Sách không tồn tại." });
     }
 
-    // ── Kiểm tra 3: Sách có sẵn để mượn không ───────────────────────────
-    // (soLuongTienTai chỉ trừ khi Admin duyệt, nhưng nên cảnh báo sớm)
-    if (book.soLuongTienTai <= 0) {
+    const activeCount = await BorrowRecord.countDocuments({
+      user: userId,
+      trangThai: { $in: [BORROW_STATUS.PENDING, BORROW_STATUS.BORROWING] },
+    });
+
+    if (activeCount >= MAX_BORROW_LIMIT) {
       return res.status(400).json({
         success: false,
-        message: "Sách hiện đã hết, vui lòng thử lại sau.",
+        message: `Bạn đang có ${activeCount} sách chờ duyệt/đang mượn. Giới hạn tối đa là ${MAX_BORROW_LIMIT}.`,
       });
     }
 
-    // ── Tạo BorrowRecord ─────────────────────────────────────────────────
+    if (book.soLuongTienTai <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Sách hiện đã hết.",
+      });
+    }
+
     const record = await BorrowRecord.create({
       user: userId,
       book: bookId,
       ngayHenTra: new Date(ngayHenTra),
-      trangThai: "ChoDuyet",
+      trangThai: BORROW_STATUS.PENDING,
+      ghiChu: String(ghiChu || "").trim(),
     });
+
     await record.populate(BORROW_POPULATE);
 
-    // ── NEW: Notification khi tạo yêu cầu mượn (cho admin) ───────────────
     const io = req.app.get("io");
-
-    const adminNotif = new Notification({
-      title: `Yêu cầu mượn sách mới`,
-      message: `Người dùng ${req.user.hoTen} vừa tạo yêu cầu mượn sách.`,
+    const adminNotif = await Notification.create({
+      title: "Yêu cầu mượn sách mới",
+      message: `Người dùng ${req.user.hoTen || "không xác định"} vừa tạo yêu cầu mượn sách.`,
       type: "borrow_update",
       relatedId: record._id,
       relatedType: "borrow",
       data: {
         userId: req.user._id,
-        userName: req.user.hoTen,
         borrowId: record._id,
+        trangThai: BORROW_STATUS.PENDING,
       },
     });
-    await adminNotif.save();
 
-    // Emit broadcast cho admin
-    io.emit("adminNotification", adminNotif);
+    io?.emit("adminNotification", adminNotif);
 
-    return res.status(201).json({ success: true, data: record });
+    return res
+      .status(201)
+      .json({ success: true, data: toClientBorrow(record) });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [ADMIN] POST /api/borrows/admin - Tạo phiếu mượn trực tiếp cho bạn đọc
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * [ADMIN] POST /api/borrows/admin
+ * Tạo trực tiếp phiếu mượn cho bạn đọc.
+ */
 exports.createBorrowByAdmin = async (req, res) => {
   let createdRecords = [];
-  let stockAdjustedItems = [];
+  let stockAdjusted = [];
 
   try {
+    if (!isAdmin(req)) {
+      return res.status(403).json({
+        success: false,
+        message: "Chỉ Admin mới được tạo phiếu mượn trực tiếp.",
+      });
+    }
+
     const { userId, ngayMuon, ngayHenTra, ghiChu = "", items = [] } = req.body;
-    const groupedItems = gopSachTrung(items);
+    const groupedItems = sanitizeItems(items);
 
     if (!userId || !ngayMuon || !ngayHenTra || groupedItems.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Bạn đọc, ngày mượn, ngày hẹn trả và danh sách sách là bắt buộc.",
+        message:
+          "Bạn đọc, ngày mượn, ngày hẹn trả và danh sách sách là bắt buộc.",
       });
     }
 
@@ -199,12 +223,11 @@ exports.createBorrowByAdmin = async (req, res) => {
       });
     }
 
-    const reader = await User.findById(userId).select("hoTen role");
+    const reader = await User.findById(userId).select("role hoTen");
     if (!reader) {
-      return res.status(404).json({
-        success: false,
-        message: "Bạn đọc không tồn tại.",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Bạn đọc không tồn tại." });
     }
 
     if (reader.role !== "user") {
@@ -214,38 +237,39 @@ exports.createBorrowByAdmin = async (req, res) => {
       });
     }
 
-    const tongSoLuong = groupedItems.reduce((sum, item) => sum + item.quantity, 0);
-    const dangMuon = await BorrowRecord.countDocuments({
+    const totalQuantity = groupedItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
+    const activeCount = await BorrowRecord.countDocuments({
       user: userId,
-      trangThai: { $in: ["ChoDuyet", "DangMuon"] },
+      trangThai: { $in: [BORROW_STATUS.PENDING, BORROW_STATUS.BORROWING] },
     });
 
-    if (dangMuon + tongSoLuong > MAX_BORROW_LIMIT) {
+    if (activeCount + totalQuantity > MAX_BORROW_LIMIT) {
       return res.status(400).json({
         success: false,
-        message: `Bạn đọc hiện đã có ${dangMuon} sách đang mượn/chờ duyệt. Tối đa chỉ được ${MAX_BORROW_LIMIT} cuốn cùng lúc.`,
+        message: `Bạn đọc hiện có ${activeCount} sách chờ duyệt/đang mượn. Tối đa chỉ được ${MAX_BORROW_LIMIT} cuốn.`,
       });
     }
 
-    const bookIds = groupedItems.map((item) => item.bookId);
-    const books = await Book.find({ _id: { $in: bookIds } }).select(
-      "tenSach soLuongTienTai",
-    );
-
-    if (books.length !== bookIds.length) {
+    const books = await Book.find({
+      _id: { $in: groupedItems.map((i) => i.bookId) },
+    }).select("tenSach soLuongTienTai");
+    if (books.length !== groupedItems.length) {
       return res.status(404).json({
         success: false,
         message: "Có sách trong danh sách không tồn tại.",
       });
     }
 
-    const bookMap = new Map(books.map((book) => [String(book._id), book]));
+    const bookMap = new Map(books.map((b) => [String(b._id), b]));
     for (const item of groupedItems) {
       const book = bookMap.get(item.bookId);
       if (!book || book.soLuongTienTai < item.quantity) {
         return res.status(400).json({
           success: false,
-          message: `Sách "${book?.tenSach || "không xác định"}" không đủ số lượng tồn.`,
+          message: `Sách "${book?.tenSach || item.bookId}" không đủ số lượng tồn.`,
         });
       }
     }
@@ -256,116 +280,117 @@ exports.createBorrowByAdmin = async (req, res) => {
         book: item.bookId,
         ngayMuon: borrowDate,
         ngayHenTra: dueDate,
-        trangThai: "DangMuon",
+        trangThai: BORROW_STATUS.BORROWING,
         ghiChu: String(ghiChu || "").trim(),
       })),
     );
 
     for (const item of groupedItems) {
-      const updatedBook = await Book.findOneAndUpdate(
-        {
-          _id: item.bookId,
-          soLuongTienTai: { $gte: item.quantity },
-        },
+      const updated = await Book.findOneAndUpdate(
+        { _id: item.bookId, soLuongTienTai: { $gte: item.quantity } },
         { $inc: { soLuongTienTai: -item.quantity } },
         { new: true },
       );
-
-      if (!updatedBook) {
-        if (stockAdjustedItems.length > 0) {
+      if (!updated) {
+        // rollback stock đã trừ trước đó
+        if (stockAdjusted.length > 0) {
           await Book.bulkWrite(
-            stockAdjustedItems.map((adjustedItem) => ({
+            stockAdjusted.map((x) => ({
               updateOne: {
-                filter: { _id: adjustedItem.bookId },
-                update: { $inc: { soLuongTienTai: adjustedItem.quantity } },
+                filter: { _id: x.bookId },
+                update: { $inc: { soLuongTienTai: x.quantity } },
               },
             })),
           );
         }
-
         return res.status(400).json({
           success: false,
-          message: "Một hoặc nhiều sách không còn đủ số lượng để tạo phiếu mượn.",
+          message:
+            "Một hoặc nhiều sách không còn đủ số lượng để tạo phiếu mượn.",
         });
       }
-
-      stockAdjustedItems.push(item);
+      stockAdjusted.push(item);
     }
 
     createdRecords = await BorrowRecord.insertMany(payloads);
-
     const populatedRecords = await BorrowRecord.find({
-      _id: { $in: createdRecords.map((record) => record._id) },
-    })
-      .populate(BORROW_POPULATE)
-      .sort({ createdAt: -1 });
+      _id: { $in: createdRecords.map((r) => r._id) },
+    }).populate(BORROW_POPULATE);
 
     const io = req.app.get("io");
-    const userNotif = new Notification({
+    const userNotif = await Notification.create({
       user: userId,
       title: "Phiếu mượn mới đã được tạo",
       message: `Bạn có ${populatedRecords.length} sách vừa được ghi nhận mượn.`,
       type: "borrow_update",
       relatedId: populatedRecords[0]?._id || null,
       relatedType: "borrow",
-      data: { createdCount: populatedRecords.length, trangThai: "DangMuon" },
+      data: {
+        createdCount: populatedRecords.length,
+        trangThai: BORROW_STATUS.BORROWING,
+      },
     });
-    await userNotif.save();
-    io.to(`user_${userId}`).emit("newNotification", userNotif);
-    io.emit("adminBorrowUpdated", {
+
+    io?.to(`user_${userId}`).emit("newNotification", userNotif);
+    io?.emit("adminBorrowUpdated", {
       recordIds: populatedRecords.map((record) => record._id),
-      trangThai: "DangMuon",
+      trangThai: BORROW_STATUS.BORROWING,
     });
 
     return res.status(201).json({
       success: true,
-      data: populatedRecords,
+      data: populatedRecords.map(toClientBorrow),
       totalCreated: populatedRecords.length,
     });
   } catch (err) {
     if (createdRecords.length > 0) {
       await BorrowRecord.deleteMany({
-        _id: { $in: createdRecords.map((record) => record._id) },
+        _id: { $in: createdRecords.map((r) => r._id) },
       });
     }
-
-    if (stockAdjustedItems.length > 0) {
+    if (stockAdjusted.length > 0) {
       await Book.bulkWrite(
-        stockAdjustedItems.map((item) => ({
+        stockAdjusted.map((x) => ({
           updateOne: {
-            filter: { _id: item.bookId },
-            update: { $inc: { soLuongTienTai: item.quantity } },
+            filter: { _id: x.bookId },
+            update: { $inc: { soLuongTienTai: x.quantity } },
           },
         })),
       );
     }
-
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [ADMIN] PATCH /api/borrows/:id/status - Cập nhật trạng thái phiếu mượn
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * [ADMIN ONLY] PATCH /api/borrows/:id/status
+ */
 exports.updateBorrowStatus = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { trangThai, lyDoTuChoi } = req.body;
+    if (!isAdmin(req)) {
+      return res.status(403).json({
+        success: false,
+        message: "Chỉ Admin mới được thay đổi trạng thái phiếu mượn.",
+      });
+    }
 
-    const validStatuses = [
-      "ChoDuyet",
-      "DangMuon",
-      "DaTra",
-      "MatSach",
-      "TuChoi",
-    ];
-    if (!validStatuses.includes(trangThai)) {
+    const { id } = req.params;
+    const { trangThai, lyDoTuChoi = "" } = req.body;
+
+    if (
+      ![
+        BORROW_STATUS.PENDING,
+        BORROW_STATUS.BORROWING,
+        BORROW_STATUS.RETURNED,
+        BORROW_STATUS.REJECTED,
+        BORROW_STATUS.LOST,
+      ].includes(trangThai)
+    ) {
       return res
         .status(400)
         .json({ success: false, message: "Trạng thái không hợp lệ." });
     }
 
-    // Populate book để tính tiền phạt và cập nhật số lượng
     const record = await BorrowRecord.findById(id).populate("book");
     if (!record) {
       return res
@@ -373,62 +398,79 @@ exports.updateBorrowStatus = async (req, res) => {
         .json({ success: false, message: "Phiếu mượn không tồn tại." });
     }
 
-    const trangThaiCu = record.trangThai;
+    const currentStatus = record.trangThai;
 
-    // ── Nghiệp vụ: ChoDuyet → DangMuon (Trừ số lượng sách) ───────────────
-    if (trangThaiCu === "ChoDuyet" && trangThai === "DangMuon") {
+    if (currentStatus === trangThai) {
+      await record.populate(BORROW_POPULATE);
+      return res.json({ success: true, data: toClientBorrow(record) });
+    }
+
+    // [ROLE CHECK / BUSINESS RULE] chỉ cho phép duyệt khi đang chờ duyệt
+    if (trangThai === BORROW_STATUS.BORROWING) {
+      if (currentStatus !== BORROW_STATUS.PENDING) {
+        return res.status(400).json({
+          success: false,
+          message: "Chỉ có thể duyệt phiếu đang chờ duyệt.",
+        });
+      }
+
       const book = await Book.findById(record.book._id);
-      if (book.soLuongTienTai <= 0) {
+      if (!book || book.soLuongTienTai <= 0) {
         return res.status(400).json({
           success: false,
           message: "Sách đã hết, không thể duyệt mượn.",
         });
       }
-      // Trừ 1 đơn vị tồn kho
+
       await Book.findByIdAndUpdate(record.book._id, {
         $inc: { soLuongTienTai: -1 },
       });
+
+      record.lyDoTuChoi = "";
+      record.ngayTraThucTe = null;
     }
 
-    // ── Nghiệp vụ: Từ chối phiếu đang chờ duyệt ─────────────────────────────
-    if (trangThai === "TuChoi") {
-      if (trangThaiCu !== "ChoDuyet") {
+    if (trangThai === BORROW_STATUS.REJECTED) {
+      if (currentStatus !== BORROW_STATUS.PENDING) {
         return res.status(400).json({
           success: false,
           message: "Chỉ có thể từ chối phiếu đang chờ duyệt.",
         });
       }
-
-      record.lyDoTuChoi = lyDoTuChoi?.trim() || "";
+      record.lyDoTuChoi = String(lyDoTuChoi || "").trim();
     }
 
-    // ── Nghiệp vụ: Chuyển sang DaTra (Cộng lại số lượng + tính phạt) ─────
-    if (trangThai === "DaTra" && trangThaiCu !== "DaTra") {
-      record.ngayTraThucTe = new Date();
-      record.lyDoTuChoi = "";
-
-      // Cộng lại 1 đơn vị tồn kho (chỉ cộng nếu đang ở trạng thái DangMuon)
-      if (trangThaiCu === "DangMuon") {
-        await Book.findByIdAndUpdate(record.book._id, {
-          $inc: { soLuongTienTai: 1 },
+    if (trangThai === BORROW_STATUS.RETURNED) {
+      if (currentStatus !== BORROW_STATUS.BORROWING) {
+        return res.status(400).json({
+          success: false,
+          message: "Chỉ có thể trả sách đối với phiếu đang mượn.",
         });
       }
 
-      // Tính tiền phạt trễ hạn
-      record.tienPhat = tinhTienPhat({
+      record.ngayTraThucTe = new Date();
+      record.tienPhat = calculateFine({
         ...record.toObject(),
-        trangThai: "DaTra",
+        trangThai: BORROW_STATUS.RETURNED,
       });
-    }
 
-    // ── Nghiệp vụ: Chuyển sang MatSach (Phạt = giá sách, không cộng lại) ─
-    if (trangThai === "MatSach" && trangThaiCu !== "MatSach") {
-      record.tienPhat = record.book.donGia;
+      await Book.findByIdAndUpdate(record.book._id, {
+        $inc: { soLuongTienTai: 1 },
+      });
+
       record.lyDoTuChoi = "";
-      // Không cộng lại soLuongTienTai vì sách bị mất
     }
 
-    if (trangThai === "DangMuon") {
+    if (trangThai === BORROW_STATUS.LOST) {
+      if (currentStatus !== BORROW_STATUS.BORROWING) {
+        return res.status(400).json({
+          success: false,
+          message: "Chỉ có thể báo mất sách đối với phiếu đang mượn.",
+        });
+      }
+
+      record.ngayTraThucTe = new Date();
+      record.tienPhat = Number(record.book.donGia || 0);
       record.lyDoTuChoi = "";
     }
 
@@ -436,68 +478,59 @@ exports.updateBorrowStatus = async (req, res) => {
     await record.save();
     await record.populate(BORROW_POPULATE);
 
-    // ── NEW: Tạo & Emit Notification ─────────────────────────────────────
     const io = req.app.get("io");
 
-    // Notification cho user
-    const userNotif = new Notification({
-      user: record.user,
-      title: `Phiếu mượn ${record._id.slice(-6).toUpperCase()} đã được cập nhật`,
-      message: `Trạng thái: ${trangThai}. ${record.tienPhat > 0 ? `Phạt: ${record.tienPhat.toLocaleString()}đ` : ""}`,
+    const userNotif = await Notification.create({
+      user: record.user._id || record.user,
+      title: `Phiếu mượn ${String(record._id).slice(-6).toUpperCase()} đã được cập nhật`,
+      message: `Trạng thái mới: ${record.trangThai}${record.tienPhat > 0 ? `, tiền phạt: ${record.tienPhat.toLocaleString("vi-VN")}đ` : ""}`,
       type: "borrow_update",
       relatedId: record._id,
       relatedType: "borrow",
-      data: { trangThai, tienPhat: record.tienPhat },
+      data: {
+        trangThai: record.trangThai,
+        tienPhat: record.tienPhat,
+      },
     });
-    await userNotif.save();
 
-    // Emit tới user room
-    io.to(`user_${record.user}`).emit("newNotification", userNotif);
+    io?.to(`user_${record.user._id || record.user}`).emit(
+      "newNotification",
+      userNotif,
+    );
+    io?.to(`user_${record.user._id || record.user}`).emit(
+      "borrowStatusUpdated",
+      {
+        recordId: record._id,
+        trangThai: record.trangThai,
+        tienPhat: record.tienPhat,
+      },
+    );
 
-    // Notification cho admin (nếu không phải admin thực hiện)
-    if (req.user.role !== "admin") {
-      const adminNotif = new Notification({
-        user: null, // Broadcast cho tất cả admin sau
-        title: `Phiếu mượn mới được cập nhật`,
-        message: `Phiếu ${record._id.slice(-6).toUpperCase()}: ${trangThai}`,
-        type: "borrow_update",
-        relatedId: record._id,
-        relatedType: "borrow",
-        data: { trangThai },
-      });
-      await adminNotif.save();
-
-      // Emit broadcast cho admin
-      io.emit("adminNotification", adminNotif);
-    }
-
-    // ── Emit Socket.io: Thông báo cập nhật UI (legacy) ───────────────────
-    // Emit tới room cá nhân của user để cập nhật UI không cần reload
-    io.to(`user_${record.user}`).emit("borrowStatusUpdated", {
-      recordId: record._id,
-      trangThai: record.trangThai,
-      tienPhat: record.tienPhat,
-    });
-    // Emit broadcast cho Admin dashboard
-    io.emit("adminBorrowUpdated", {
+    io?.emit("adminBorrowUpdated", {
       recordId: record._id,
       trangThai: record.trangThai,
     });
 
-    return res.json({ success: true, data: record });
+    return res.json({ success: true, data: toClientBorrow(record) });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [ADMIN] PATCH /api/borrows/:id/extend - Gia hạn phiếu mượn
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * [ADMIN ONLY] PATCH /api/borrows/:id/extend
+ */
 exports.extendBorrow = async (req, res) => {
   try {
+    if (!isAdmin(req)) {
+      return res.status(403).json({
+        success: false,
+        message: "Chỉ Admin mới được gia hạn phiếu mượn.",
+      });
+    }
+
     const { id } = req.params;
-    const { days } = req.body;
-    const extendDays = Number(days);
+    const extendDays = Number(req.body.days);
 
     if (!Number.isInteger(extendDays) || extendDays <= 0) {
       return res.status(400).json({
@@ -516,32 +549,34 @@ exports.extendBorrow = async (req, res) => {
         .json({ success: false, message: "Phiếu mượn không tồn tại." });
     }
 
-    if (record.trangThai !== "DangMuon") {
+    if (record.trangThai !== BORROW_STATUS.BORROWING) {
       return res.status(400).json({
         success: false,
         message: "Chỉ có thể gia hạn phiếu đang mượn.",
       });
     }
 
-    const ngayHenTra = new Date(record.ngayHenTra);
-    ngayHenTra.setDate(ngayHenTra.getDate() + extendDays);
-    record.ngayHenTra = ngayHenTra;
-    await record.save();
+    const dueDate = new Date(record.ngayHenTra);
+    dueDate.setDate(dueDate.getDate() + extendDays);
+    record.ngayHenTra = dueDate;
 
-    return res.json({ success: true, data: record });
+    await record.save();
+    await record.populate(BORROW_POPULATE);
+
+    return res.json({ success: true, data: toClientBorrow(record) });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [USER/ADMIN] GET /api/borrows/:id - Chi tiết phiếu mượn (có tính phạt tạm tính)
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * [USER/ADMIN] GET /api/borrows/:id
+ */
 exports.getBorrowDetail = async (req, res) => {
   try {
     const record = await BorrowRecord.findById(req.params.id)
-      .populate("user", "hoTen email dienThoai")
-      .populate("book", "tenSach donGia tacGia hinhAnh");
+      .populate("user", "hoTen email dienThoai role avatar")
+      .populate("book", "tenSach donGia tacGia hinhAnh tenNXB");
 
     if (!record) {
       return res
@@ -549,24 +584,24 @@ exports.getBorrowDetail = async (req, res) => {
         .json({ success: false, message: "Phiếu mượn không tồn tại." });
     }
 
-    const isAdmin = req.user.role === "admin";
-    const isOwner = String(record.user._id) === String(req.user._id);
+    const ownerId = String(record.user._id || record.user);
+    const currentUserId = String(req.user._id);
+    const admin = isAdmin(req);
+    const owner = ownerId === currentUserId;
 
-    if (!isAdmin && !isOwner) {
+    // [ROLE CHECK] chỉ Admin hoặc chính chủ mới xem được
+    if (!admin && !owner) {
       return res.status(403).json({
         success: false,
         message: "Bạn không có quyền xem phiếu mượn này.",
       });
     }
 
-    // Tính tiền phạt tạm tính (nếu đang mượn mà quá hạn)
-    const tienPhatTamTinh = tinhTienPhat(record);
-
     return res.json({
       success: true,
       data: {
-        ...record.toObject(),
-        tienPhatTamTinh, // Dùng cho UI hiển thị cảnh báo, chưa lưu DB
+        ...toClientBorrow(record),
+        finePreview: calculateFine(record),
       },
     });
   } catch (err) {
@@ -574,36 +609,57 @@ exports.getBorrowDetail = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [ADMIN] GET /api/borrows - Lấy danh sách tất cả phiếu mượn (có filter)
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * [ADMIN] GET /api/borrows
+ * [USER]  GET /api/borrows  -> chỉ trả về dữ liệu của chính họ
+ */
 exports.getAllBorrows = async (req, res) => {
   try {
-    const { trangThai, status, userId, page = 1, limit = 10 } = req.query;
-    const filter = {};
-    if (trangThai || status) filter.trangThai = trangThai || status;
-    if (userId) filter.user = userId;
+    const {
+      trangThai,
+      status,
+      userId,
+      //eslint-disable-next-line no-unused-vars
+      q = "",
+      page = 1,
+      limit = 10,
+    } = req.query;
 
-    const records = await BorrowRecord.find(filter)
-      .populate("user", "hoTen email dienThoai")
-      .populate("book", "tenSach tacGia hinhAnh donGia soLuongTienTai")
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+    const filter = {};
+    const selectedStatus = trangThai || status;
+
+    if (selectedStatus) filter.trangThai = selectedStatus;
+
+    if (!isAdmin(req)) {
+      // [ROLE CHECK] Reader chỉ nhìn thấy dữ liệu của chính mình
+      filter.user = req.user._id;
+    } else if (userId) {
+      filter.user = userId;
+    }
+
+    const pageNum = Math.max(1, Number(page) || 1);
+    const limitNum = Math.max(1, Number(limit) || 10);
+
+    let query = BorrowRecord.find(filter)
+      .populate("user", "hoTen email dienThoai role avatar")
+      .populate("book", "tenSach tacGia hinhAnh donGia soLuongTienTai tenNXB")
+      .sort({ createdAt: -1 });
+
+    const records = await query.skip((pageNum - 1) * limitNum).limit(limitNum);
     const total = await BorrowRecord.countDocuments(filter);
-    const totalPages = Math.max(1, Math.ceil(total / Number(limit || 10)));
+    const mapped = records.map(toClientBorrow);
 
     return res.json({
       success: true,
-      data: records,
+      data: mapped,
       total,
-      page: Number(page),
-      limit: Number(limit),
+      page: pageNum,
+      limit: limitNum,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        totalPages,
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
       },
     });
   } catch (err) {
@@ -611,22 +667,20 @@ exports.getAllBorrows = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// [USER] GET /api/borrows/my - Lịch sử mượn sách của user hiện tại
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * [USER] GET /api/borrows/my
+ */
 exports.getMyBorrows = async (req, res) => {
   try {
     const records = await BorrowRecord.find({ user: req.user._id })
-      .populate("book", "tenSach tacGia hinhAnh donGia")
+      .populate("user", "hoTen email dienThoai role avatar")
+      .populate("book", "tenSach tacGia hinhAnh donGia soLuongTienTai tenNXB")
       .sort({ createdAt: -1 });
 
-    // Tính tiền phạt tạm tính cho từng record
-    const enriched = records.map((r) => ({
-      ...r.toObject(),
-      tienPhatTamTinh: tinhTienPhat(r),
-    }));
-
-    return res.json({ success: true, data: enriched });
+    return res.json({
+      success: true,
+      data: records.map(toClientBorrow),
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

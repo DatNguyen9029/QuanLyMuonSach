@@ -7,10 +7,10 @@
     <div class="space-y-4">
       <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
         <p class="text-sm text-yellow-800">
-          <strong>Sách:</strong> {{ borrow?.book?.title }}
+          <strong>Sách:</strong> {{ borrow?.book?.title || "-" }}
         </p>
         <p class="text-sm text-yellow-800 mt-1">
-          <strong>Độc giả:</strong> {{ borrow?.reader?.name }}
+          <strong>Độc giả:</strong> {{ borrow?.reader?.name || "-" }}
         </p>
       </div>
 
@@ -22,7 +22,7 @@
         <div>
           <label class="form-label">Ngày trả</label>
           <p class="text-sm text-gray-700">
-            {{ formatDate(borrow?.returnDate) }}
+            {{ formatDate(effectiveReturnDate) }}
           </p>
         </div>
       </div>
@@ -35,7 +35,7 @@
       <div class="border-t border-gray-200 pt-4">
         <label class="form-label">Tính toán phạt</label>
         <p class="text-sm text-gray-600 mb-2">
-          Mức phạt: {{ finePerDay.toLocaleString() }}đ / ngày
+          Mức phạt: {{ Number(finePerDay).toLocaleString("vi-VN") }}đ / ngày
         </p>
         <p class="text-3xl font-bold text-danger-600">
           {{ formatCurrency(totalFine) }}
@@ -49,7 +49,7 @@
           class="form-control"
           rows="2"
           placeholder="Bình luận về khoản phạt này"
-        ></textarea>
+        />
       </div>
     </div>
   </AppModel>
@@ -60,10 +60,13 @@ import { ref, computed } from "vue";
 import AppModel from "@/components/common/AppModel.vue";
 
 const props = defineProps({
-  borrow: Object,
+  borrow: {
+    type: Object,
+    default: null,
+  },
   finePerDay: {
     type: Number,
-    default: 5000, // 5k per day
+    default: 10000,
   },
 });
 
@@ -71,40 +74,40 @@ const emit = defineEmits(["close", "confirm"]);
 
 const notes = ref("");
 
-const daysOverdue = computed(() => {
-  if (!props.borrow?.dueDate || !props.borrow?.returnDate) return 0;
-  const dueDate = new Date(props.borrow.dueDate);
-  const returnDate = new Date(props.borrow.returnDate);
-  const days = Math.max(
-    0,
-    Math.ceil((returnDate - dueDate) / (1000 * 60 * 60 * 24)),
-  );
-  return days;
+const effectiveReturnDate = computed(() => {
+  return props.borrow?.returnedDate || new Date();
 });
 
-const totalFine = computed(() => daysOverdue.value * props.finePerDay);
+const daysOverdue = computed(() => {
+  if (!props.borrow?.dueDate) return 0;
+  const dueDate = new Date(props.borrow.dueDate);
+  const returnDate = new Date(effectiveReturnDate.value);
+  const diff = Math.ceil((returnDate - dueDate) / (1000 * 60 * 60 * 24));
+  return Math.max(0, diff);
+});
 
-const formatDate = (date) => {
+const totalFine = computed(
+  () => daysOverdue.value * Number(props.finePerDay || 0),
+);
+
+function formatDate(date) {
   if (!date) return "-";
   return new Date(date).toLocaleDateString("vi-VN");
-};
+}
 
-const formatCurrency = (amount) => {
+function formatCurrency(amount) {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
     currency: "VND",
-  }).format(amount);
-};
+  }).format(Number(amount || 0));
+}
 
-const handleConfirm = () => {
+function handleConfirm() {
   emit("confirm", {
-    borrowId: props.borrow?.id,
+    borrowId: props.borrow?._id || props.borrow?.id,
     fine: totalFine.value,
+    daysOverdue: daysOverdue.value,
     notes: notes.value,
   });
-};
+}
 </script>
-
-<style scoped>
-/* Component-specific styles */
-</style>

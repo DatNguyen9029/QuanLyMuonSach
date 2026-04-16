@@ -1,13 +1,18 @@
 const mongoose = require("mongoose");
 
+const BORROW_STATUS = Object.freeze({
+  PENDING: "ChoDuyet",
+  BORROWING: "DangMuon",
+  RETURNED: "DaTra",
+  REJECTED: "TuChoi",
+  LOST: "MatSach",
+});
+
 /**
  * BorrowRecord Schema - Phiếu mượn sách
- *
- * Luồng trạng thái:
- *   User tạo yêu cầu → 'ChoDuyet'
- *   Admin duyệt       → 'DangMuon'  (trừ soLuongTienTai -= 1)
- *   User trả sách     → 'DaTra'     (cộng soLuongTienTai += 1, tính phạt nếu trễ)
- *   Admin ghi nhận    → 'MatSach'   (tienPhat = donGia sách)
+ * - user: người mượn (Reader)
+ * - book: sách được mượn
+ * - trangThai: trạng thái nghiệp vụ lưu trong DB
  */
 const borrowRecordSchema = new mongoose.Schema(
   {
@@ -15,11 +20,13 @@ const borrowRecordSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
     book: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Book",
       required: true,
+      index: true,
     },
     ngayMuon: {
       type: Date,
@@ -27,23 +34,28 @@ const borrowRecordSchema = new mongoose.Schema(
     },
     ngayHenTra: {
       type: Date,
-      required: true, // Admin/user đặt khi tạo phiếu
+      required: true,
+      index: true,
     },
     ngayTraThucTe: {
-      type: Date, // Được cập nhật khi Admin đổi sang 'DaTra'
+      type: Date,
+      default: null,
     },
     trangThai: {
       type: String,
-      enum: ["ChoDuyet", "DangMuon", "DaTra", "MatSach", "TuChoi"],
-      default: "ChoDuyet",
+      enum: Object.values(BORROW_STATUS),
+      default: BORROW_STATUS.PENDING,
+      index: true,
     },
     tienPhat: {
       type: Number,
-      default: 0, // VND
+      default: 0,
+      min: 0,
     },
     lyDoTuChoi: {
       type: String,
       trim: true,
+      default: "",
     },
     ghiChu: {
       type: String,
@@ -54,4 +66,8 @@ const borrowRecordSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+borrowRecordSchema.index({ user: 1, trangThai: 1, createdAt: -1 });
+borrowRecordSchema.index({ book: 1, trangThai: 1, createdAt: -1 });
+
 module.exports = mongoose.model("BorrowRecord", borrowRecordSchema);
+module.exports.BORROW_STATUS = BORROW_STATUS;
