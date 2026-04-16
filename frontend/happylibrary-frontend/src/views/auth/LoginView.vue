@@ -1,10 +1,53 @@
 <template>
   <div class="w-full max-w-sm">
-    <h2 class="text-2xl font-bold text-gray-800 mb-1">Đăng nhập</h2>
-    <p class="text-sm text-gray-400 mb-7">Chào mừng trở lại Happy Library</p>
+    <div class="grid grid-cols-2 gap-2 mb-6">
+      <button
+        type="button"
+        @click="mode = 'login'"
+        :class="[
+          'py-3 rounded-xl text-sm font-semibold transition-colors',
+          mode === 'login'
+            ? 'bg-[#0F1729] text-white'
+            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50',
+        ]"
+      >
+        Đăng nhập
+      </button>
+      <button
+        type="button"
+        @click="mode = 'register'"
+        :class="[
+          'py-3 rounded-xl text-sm font-semibold transition-colors',
+          mode === 'register'
+            ? 'bg-[#0F1729] text-white'
+            : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50',
+        ]"
+      >
+        Đăng ký
+      </button>
+    </div>
+
+    <h2 class="text-2xl font-bold text-gray-800 mb-1">
+      {{ mode === "login" ? "Đăng nhập" : "Đăng ký" }}
+    </h2>
+    <p class="text-sm text-gray-400 mb-7">
+      {{
+        mode === "login"
+          ? "Chào mừng trở lại Happy Library"
+          : "Tạo tài khoản để bắt đầu sử dụng Happy Library"
+      }}
+    </p>
+
+    <div
+      v-if="success"
+      class="mb-5 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700"
+    >
+      {{ success }}
+    </div>
 
     <!-- Google OAuth button -->
     <a
+      v-if="mode === 'login'"
       :href="googleLoginUrl"
       class="flex items-center justify-center gap-3 w-full py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50 transition-all text-sm font-semibold text-gray-700 mb-5"
     >
@@ -36,7 +79,37 @@
     </div>
 
     <!-- Email / Password form -->
-    <form @submit.prevent="handleLogin" class="space-y-4">
+    <form
+      @submit.prevent="mode === 'login' ? handleLogin() : handleRegister()"
+      class="space-y-4"
+    >
+      <template v-if="mode === 'register'">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1.5"
+            >Họ và tên</label
+          >
+          <input
+            v-model="form.hoTen"
+            type="text"
+            required
+            placeholder="Nguyễn Văn A"
+            class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white"
+          />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1.5"
+            >Tên đăng nhập</label
+          >
+          <input
+            v-model="form.username"
+            type="text"
+            required
+            placeholder="nguyenvana"
+            class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white"
+          />
+        </div>
+      </template>
+
       <div>
         <label class="block text-xs font-semibold text-gray-600 mb-1.5"
           >Email</label
@@ -61,6 +134,22 @@
           class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white"
         />
       </div>
+
+      <template v-if="mode === 'register'">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1.5"
+            >Xác nhận mật khẩu</label
+          >
+          <input
+            v-model="form.confirmPassword"
+            type="password"
+            required
+            placeholder="••••••••"
+            class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white"
+          />
+        </div>
+      </template>
+
       <p
         v-if="error"
         class="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg"
@@ -72,35 +161,122 @@
         :disabled="loading"
         class="w-full py-3 rounded-xl bg-[#0F1729] text-white text-sm font-bold hover:bg-[#1a2540] transition-colors disabled:opacity-60"
       >
-        {{ loading ? "Đang đăng nhập..." : "Đăng nhập" }}
+        {{
+          loading
+            ? mode === "login"
+              ? "Đang đăng nhập..."
+              : "Đang đăng ký..."
+            : mode === "login"
+              ? "Đăng nhập"
+              : "Đăng ký"
+        }}
       </button>
     </form>
+
+    <p class="text-center text-xs text-gray-600 mt-4">
+      {{ mode === "login" ? "Chưa có tài khoản?" : "Đã có tài khoản?" }}
+      <button
+        type="button"
+        @click="mode = mode === 'login' ? 'register' : 'login'"
+        class="text-amber-600 hover:text-amber-700 font-semibold"
+      >
+        {{ mode === "login" ? "Đăng ký" : "Đăng nhập" }}
+      </button>
+    </p>
   </div>
 </template>
 
 <script setup>
 import { ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import api from "@/services/api";
 import { useAuthStore } from "@/stores/auth.store";
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 
+const mode = ref("login");
 const googleLoginUrl = `${import.meta.env.VITE_API_BASE_URL || "http://localhost:3000/api"}/auth/google`;
-const form = ref({ email: "", password: "" });
+const form = ref({
+  hoTen: "",
+  username: "",
+  email: "",
+  password: "",
+  confirmPassword: "",
+});
 const loading = ref(false);
 const error = ref("");
+const success = ref("");
+
+function clearMessages() {
+  error.value = "";
+  success.value = "";
+}
+
+function resetForm() {
+  form.value = {
+    hoTen: "",
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  };
+}
+
+function setMode(newMode) {
+  mode.value = newMode;
+  clearMessages();
+}
 
 async function handleLogin() {
   loading.value = true;
-  error.value = "";
+  clearMessages();
   try {
     await authStore.login(form.value.email, form.value.password);
     router.push(route.query.redirect || "/dashboard");
   } catch (e) {
     error.value = e.message || "Email hoặc mật khẩu không đúng";
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function handleRegister() {
+  clearMessages();
+
+  if (
+    !form.value.hoTen ||
+    !form.value.username ||
+    !form.value.email ||
+    !form.value.password
+  ) {
+    error.value = "Vui lòng điền đầy đủ thông tin";
+    return;
+  }
+
+  if (form.value.password !== form.value.confirmPassword) {
+    error.value = "Mật khẩu không khớp";
+    return;
+  }
+
+  if (form.value.password.length < 6) {
+    error.value = "Mật khẩu phải có ít nhất 6 ký tự";
+    return;
+  }
+
+  loading.value = true;
+  try {
+    await authStore.register({
+      hoTen: form.value.hoTen,
+      username: form.value.username,
+      email: form.value.email,
+      password: form.value.password,
+    });
+    success.value = "Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.";
+    mode.value = "login";
+    resetForm();
+  } catch (err) {
+    error.value = err.message || "Đăng ký thất bại";
   } finally {
     loading.value = false;
   }

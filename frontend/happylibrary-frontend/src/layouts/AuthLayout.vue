@@ -81,7 +81,7 @@
     <!-- Right side - Auth Form -->
     <div class="w-full lg:w-1/2 flex items-center justify-center">
       <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 md:p-12">
-        <slot />
+        <router-view />
       </div>
     </div>
   </div>

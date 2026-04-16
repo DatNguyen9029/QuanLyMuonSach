@@ -7,10 +7,12 @@ export const useAuthStore = defineStore("auth", () => {
   // ─── STATE ─────────────────────────────────────────────────────────────────
   const user = ref(null);
   const token = ref(localStorage.getItem("hl_token") || null);
+  const userLastFetch = ref(0); // Timestamp for caching
 
   // ─── GETTERS ───────────────────────────────────────────────────────────────
   const isLoggedIn = computed(() => !!token.value && !!user.value);
   const isAdmin = computed(() => user.value?.role === "admin");
+  const isUserFresh = computed(() => Date.now() - userLastFetch.value < 300000); // 5 minutes
 
   // ─── ACTIONS ───────────────────────────────────────────────────────────────
 
@@ -49,12 +51,26 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   /**
-   * Lấy thông tin user hiện tại từ server
+   * Lấy thông tin user hiện tại từ server (với cache check)
    */
-  async function fetchCurrentUser() {
-    const { data } = await api.get("/auth/me");
-    user.value = data.data;
-    return data.data;
+  async function fetchCurrentUser(forceRefresh = false) {
+    if (!token.value) return null;
+
+    // Skip if fresh and not forced
+    if (!forceRefresh && isUserFresh.value) {
+      return user.value;
+    }
+
+    try {
+      const { data } = await api.get("/auth/me");
+      user.value = data.data;
+      userLastFetch.value = Date.now();
+      return data.data;
+    } catch (error) {
+      // If fetch fails, clear auth
+      clearAuth();
+      throw error;
+    }
   }
 
   /**
@@ -68,6 +84,7 @@ export const useAuthStore = defineStore("auth", () => {
   function setAuth(newToken, newUser) {
     token.value = newToken;
     user.value = newUser;
+    userLastFetch.value = Date.now();
     localStorage.setItem("hl_token", newToken);
   }
 
@@ -79,6 +96,7 @@ export const useAuthStore = defineStore("auth", () => {
   function clearAuth() {
     token.value = null;
     user.value = null;
+    userLastFetch.value = 0;
     localStorage.removeItem("hl_token");
   }
 
@@ -86,9 +104,11 @@ export const useAuthStore = defineStore("auth", () => {
     // state
     user,
     token,
+    userLastFetch,
     // getters
     isLoggedIn,
     isAdmin,
+    isUserFresh,
     // actions
     login,
     register,

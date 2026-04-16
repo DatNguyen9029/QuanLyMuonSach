@@ -19,24 +19,59 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// ── RESPONSE INTERCEPTOR: Xử lý lỗi toàn cục ───────────────────────────────
+// ── SIMPLE CACHE FOR GET REQUESTS ──────────────────────────────────────
+const cache = new Map();
+
+function getCacheKey(config) {
+  if (config.method !== "get") return null;
+  const params = new URLSearchParams(config.params).toString();
+  return config.url + "?" + params;
+}
+
+// ── REQUEST INTERCEPTOR: Đính kèm JWT token + Cache check ──────────────────
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("hl_token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // Check cache for GET requests (5min TTL)
+    const cacheKey = getCacheKey(config);
+    if (cacheKey) {
+      const cached = cache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < 300000) {
+        return Promise.resolve(cached.response);
+      }
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error),
+);
+
+// ── RESPONSE INTERCEPTOR: Cache GET + Error handling ─────────────────────
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const cacheKey = getCacheKey(response.config);
+    if (cacheKey) {
+      cache.set(cacheKey, { response, timestamp: Date.now() });
+    }
+    return response;
+  },
   (error) => {
     const status = error.response?.status;
+    const shouldRedirectOnForbidden = error.config?.redirectOnForbidden;
 
-    // 401: Token hết hạn hoặc không hợp lệ → đăng xuất
     if (status === 401) {
       localStorage.removeItem("hl_token");
       window.location.href = "/auth/login";
     }
 
-    // 403: Không có quyền
-    if (status === 403) {
+    if (status === 403 && shouldRedirectOnForbidden) {
       window.location.href = "/403";
     }
 
-    // Đẩy error message từ server lên để component xử lý
     const message = error.response?.data?.message || "Đã có lỗi xảy ra";
     return Promise.reject(new Error(message));
   },

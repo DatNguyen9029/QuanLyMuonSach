@@ -4,9 +4,16 @@
     <div class="mb-6 flex items-center justify-between">
       <div>
         <h1 class="text-3xl font-bold text-gray-900">Quản lý Sách</h1>
-        <p class="text-gray-600">Quản lý danh sách sách trong thư viện</p>
+        <p class="text-gray-600">
+          {{
+            authStore.isAdmin
+              ? "Quản lý danh sách sách trong thư viện"
+              : "Xem danh sách sách hiện có trong thư viện"
+          }}
+        </p>
       </div>
       <button
+        v-if="authStore.isAdmin"
         @click="openCreateModal"
         class="btn btn-primary flex items-center gap-2"
       >
@@ -42,6 +49,13 @@
           placeholder="Lọc theo NXB..."
           class="form-control w-48"
         />
+      </div>
+      <div
+        v-if="!authStore.isAdmin"
+        class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+      >
+        Tài khoản của bạn chỉ có quyền xem danh sách sách. Các thao tác thêm,
+        sửa và xóa chỉ dành cho quản trị viên.
       </div>
     </div>
 
@@ -97,6 +111,7 @@
                 Số lượng
               </th>
               <th
+                v-if="authStore.isAdmin"
                 class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
               >
                 Hành động
@@ -123,7 +138,7 @@
                   :text="`${book.soLuongTienTai} cuốn`"
                 />
               </td>
-              <td class="px-4 py-3 space-x-2">
+              <td v-if="authStore.isAdmin" class="px-4 py-3 space-x-2">
                 <button
                   @click="editBook(book)"
                   class="btn btn-secondary text-xs"
@@ -161,9 +176,11 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useBookStore } from "@/stores/book.store";
+import { useAuthStore } from "@/stores/auth.store";
 import BookFormModal from "@/components/books/BookFormModal.vue";
 import AppBadge from "@/components/common/AppBadge.vue";
 
+const authStore = useAuthStore();
 const bookStore = useBookStore();
 const searchQuery = ref("");
 const selectedPublisher = ref("");
@@ -203,11 +220,13 @@ onMounted(async () => {
 });
 
 const openCreateModal = () => {
+  if (!authStore.isAdmin) return;
   editingBook.value = null;
   showModal.value = true;
 };
 
 const editBook = (book) => {
+  if (!authStore.isAdmin) return;
   editingBook.value = { ...book };
   showModal.value = true;
 };
@@ -218,6 +237,7 @@ const closeModal = () => {
 };
 
 const saveBook = async (bookData) => {
+  if (!authStore.isAdmin) return;
   try {
     if (editingBook.value?._id) {
       await bookStore.updateBook(editingBook.value._id, bookData);
@@ -231,6 +251,7 @@ const saveBook = async (bookData) => {
 };
 
 const deleteBook = async (bookId) => {
+  if (!authStore.isAdmin) return;
   if (confirm("Bạn chắc chắn muốn xóa sách này?")) {
     try {
       await bookStore.deleteBook(bookId);

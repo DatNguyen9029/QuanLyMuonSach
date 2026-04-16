@@ -38,6 +38,10 @@ const routes = [
       },
     ],
   },
+  {
+    path: "/",
+    redirect: "/auth/login",
+  },
 
   // ── MAIN ROUTES (cần đăng nhập) ────────────────────────────────────────
   {
@@ -74,6 +78,7 @@ const routes = [
         meta: {
           title: "Quản lý Mượn/Trả | Happy Library",
           requiresAuth: true,
+          requiresAdmin: true,
         },
       },
       {
@@ -94,7 +99,16 @@ const routes = [
         meta: {
           title: "Quản lý Độc giả | Happy Library",
           requiresAuth: true,
-          requiresAdmin: true, // ← Chỉ Admin mới vào được
+          requiresAdmin: true,
+        },
+      },
+      {
+        path: "profile",
+        name: "Profile",
+        component: () => import("@/views/ProfileView.vue"),
+        meta: {
+          title: "Hồ sơ cá nhân | Happy Library",
+          requiresAuth: true,
         },
       },
     ],
@@ -150,9 +164,9 @@ router.beforeEach(async (to, from, next) => {
 
   const authStore = useAuthStore();
 
-  // Nếu có token nhưng chưa load user → gọi API lấy thông tin user
-  if (authStore.token && !authStore.user) {
-    await authStore.fetchCurrentUser().catch(() => {
+  // Nếu có token nhưng user data cũ → refresh nếu cần
+  if (authStore.token && !authStore.isUserFresh) {
+    await authStore.fetchCurrentUser(true).catch(() => {
       authStore.clearAuth();
     });
   }
