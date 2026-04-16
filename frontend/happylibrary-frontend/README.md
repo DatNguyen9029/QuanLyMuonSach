@@ -36,3 +36,54 @@ npm run dev
 ```sh
 npm run build
 ```
+
+src/
+├── assets/
+│ └── styles/
+│ └── main.css # Tailwind directives + CSS variables
+│
+├── components/
+│ ├── common/
+│ │ ├── AppBadge.vue
+│ │ ├── AppModal.vue
+│ │ └── AppDataTable.vue
+│ ├── dashboard/
+│ │ └── StatCard.vue
+│ ├── books/
+│ │ └── BookFormModal.vue
+│ ├── borrows/
+│ │ ├── BorrowDetailModal.vue
+│ │ └── FineCalculatorModal.vue
+│ └── chat/
+│ └── ChatWidget.vue
+│
+├── layouts/
+│ ├── AuthLayout.vue
+│ └── MainLayout.vue # ← Code bên dưới
+│
+├── views/
+│ ├── auth/
+│ │ ├── LoginView.vue
+│ │ └── RegisterView.vue
+│ ├── DashboardView.vue
+│ ├── BookManagementView.vue
+│ ├── BorrowManagementView.vue # ← Code bên dưới
+│ ├── ReaderManagementView.vue
+│ └── ChatView.vue
+│
+├── stores/
+│ ├── auth.store.js
+│ ├── book.store.js
+│ ├── borrow.store.js
+│ └── reader.store.js
+│
+├── services/
+│ ├── api.js # Axios instance + interceptors
+│ ├── auth.service.js
+│ ├── book.service.js
+│ └── borrow.service.js
+│
+├── router/
+│ └── index.js # ← Route guards phân quyền
+│
+└── main.js
