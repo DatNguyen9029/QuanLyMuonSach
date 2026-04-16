@@ -82,7 +82,7 @@
 import { ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import api from "@/services/api";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@/stores/auth.store";
 
 const router = useRouter();
 const route = useRoute();

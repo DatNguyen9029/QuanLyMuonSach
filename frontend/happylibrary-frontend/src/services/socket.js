@@ -23,3 +23,6 @@ export function connectSocket(userId) {
 export function disconnectSocket() {
   if (socket?.connected) socket.disconnect();
 }
+
+// Export default socket instance for direct usage
+export default getSocket();

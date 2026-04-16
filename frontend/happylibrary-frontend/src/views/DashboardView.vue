@@ -98,7 +98,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import api from "@/services/api";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore } from "@/stores/auth.store";
 
 const authStore = useAuthStore();
 const recentBorrows = ref([]);

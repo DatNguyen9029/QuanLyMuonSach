@@ -1,18 +1,17 @@
 // src/stores/borrow.store.js
 import { defineStore } from "pinia";
-import { ref, computed } from "pinia";
-import { ref as vRef, computed as vComputed } from "vue";
+import { ref, computed } from "vue";
 import api from "@/services/api";
 
 export const useBorrowStore = defineStore("borrow", () => {
   // ─── STATE ─────────────────────────────────────────────────────────────────
-  const borrows = vRef([]);
-  const isLoading = vRef(false);
-  const pagination = vRef({ page: 1, totalPages: 1, total: 0 });
-  const pendingCount = vRef(0);
+  const borrows = ref([]);
+  const isLoading = ref(false);
+  const pagination = ref({ page: 1, totalPages: 1, total: 0 });
+  const pendingCount = ref(0);
 
   // ─── GETTERS ───────────────────────────────────────────────────────────────
-  const overdueList = vComputed(() =>
+  const overdueList = computed(() =>
     borrows.value.filter((b) => {
       if (b.status !== "approved") return false;
       return new Date() > new Date(b.dueDate);
@@ -22,7 +21,7 @@ export const useBorrowStore = defineStore("borrow", () => {
   // ─── ACTIONS ───────────────────────────────────────────────────────────────
 
   /**
-   * Lấy danh sách phiếu mượn theo status + phân trang
+   * Lấy danh sách phiếu mươn theo status + phân trang
    */
   async function fetchBorrows({
     status = "pending",
@@ -35,11 +34,11 @@ export const useBorrowStore = defineStore("borrow", () => {
       const { data } = await api.get("/borrows", {
         params: { status, page, limit, search },
       });
-      borrows.value = data.borrows;
+      borrows.value = data.borrows || data;
       pagination.value = {
-        page: data.page,
-        totalPages: data.totalPages,
-        total: data.total,
+        page: data.page || page,
+        totalPages: data.totalPages || 1,
+        total: data.total || 0,
       };
     } finally {
       isLoading.value = false;
@@ -47,13 +46,13 @@ export const useBorrowStore = defineStore("borrow", () => {
   }
 
   /**
-   * Lấy số phiếu đang chờ duyệt (hiển thị badge)
+   * Lấy số phiếu đang chờ duyệt
    */
   async function fetchPendingCount() {
     const { data } = await api.get("/borrows/count", {
       params: { status: "pending" },
     });
-    pendingCount.value = data.count;
+    pendingCount.value = data.count || 0;
   }
 
   /**
@@ -77,7 +76,7 @@ export const useBorrowStore = defineStore("borrow", () => {
   }
 
   /**
-   * Xác nhận trả sách (kèm tiền phạt nếu có)
+   * Xác nhận trả sách
    */
   async function returnBook(
     borrowId,
@@ -98,42 +97,32 @@ export const useBorrowStore = defineStore("borrow", () => {
    */
   async function extendBorrow(borrowId, days) {
     const { data } = await api.patch(`/borrows/${borrowId}/extend`, { days });
-    _updateLocalBorrow(borrowId, {
-      dueDate: data.newDueDate,
-      isExtended: true,
-    });
+    _updateLocalBorrow(borrowId, { dueDate: data.dueDate });
     return data;
   }
 
-  /**
-   * Tạo phiếu mượn mới (thủ thư tạo thay độc giả)
-   */
-  async function createBorrow(payload) {
-    const { data } = await api.post("/borrows", payload);
-    borrows.value.unshift(data.borrow);
-    return data;
-  }
-
-  // ─── PRIVATE HELPERS ───────────────────────────────────────────────────────
-  function _updateLocalBorrow(id, updates) {
-    const idx = borrows.value.findIndex((b) => b._id === id);
-    if (idx !== -1) {
-      borrows.value[idx] = { ...borrows.value[idx], ...updates };
+  // ─── HELPERS ───────────────────────────────────────────────────────────────
+  function _updateLocalBorrow(borrowId, updates) {
+    const index = borrows.value.findIndex((b) => b.id === borrowId);
+    if (index > -1) {
+      borrows.value[index] = { ...borrows.value[index], ...updates };
     }
   }
 
   return {
+    // state
     borrows,
     isLoading,
     pagination,
     pendingCount,
+    // getters
     overdueList,
+    // actions
     fetchBorrows,
     fetchPendingCount,
     approveBorrow,
     rejectBorrow,
     returnBook,
     extendBorrow,
-    createBorrow,
   };
 });
