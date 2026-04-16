@@ -100,6 +100,11 @@
                 item.label
               }}</span>
             </Transition>
+            <Transition name="label-fade">
+              <span v-if="!isSidebarCollapsed && item.badge" class="nav-badge">{{
+                item.badge
+              }}</span>
+            </Transition>
           </router-link>
         </template>
       </nav>
@@ -182,10 +187,11 @@
 
         <div class="header-right">
           <!-- Notification Bell -->
-          <div
+          <button
             class="header-icon-btn"
             @click="toggleNotifications"
             style="position: relative"
+            type="button"
           >
             <svg
               viewBox="0 0 24 24"
@@ -199,10 +205,10 @@
                 d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
               />
             </svg>
-            <span v-if="pendingBorrowCount > 0" class="notif-dot">{{
-              pendingBorrowCount
+            <span v-if="notificationCount > 0" class="notif-dot">{{
+              notificationCount
             }}</span>
-          </div>
+          </button>
 
           <!-- Avatar + Dropdown -->
           <div
@@ -284,13 +290,13 @@
 
       <!-- PAGE CONTENT -->
       <main class="main-content">
-        <KeepAlive>
-          <RouterView v-slot="{ Component }">
-            <Transition name="page-fade" mode="in-out">
+        <RouterView v-slot="{ Component }">
+          <Transition name="page-fade" mode="out-in">
+            <KeepAlive :include="keepAliveViews">
               <component :is="Component" />
-            </Transition>
-          </RouterView>
-        </KeepAlive>
+            </KeepAlive>
+          </Transition>
+        </RouterView>
       </main>
     </div>
 
@@ -304,22 +310,33 @@ import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { useBorrowStore } from "@/stores/borrow.store";
+import { useNotificationStore } from "@/stores/notification.store";
 import ChatWidget from "@/components/chat/ChatWidget.vue";
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 const borrowStore = useBorrowStore();
+const notificationStore = useNotificationStore();
 
 const isSidebarCollapsed = ref(false);
 const isMobileMenuOpen = ref(false);
 const isProfileDropdownOpen = ref(false);
+const keepAliveViews = [
+  "Dashboard",
+  "Books",
+  "Borrows",
+  "Readers",
+  "Publishers",
+  "Chat",
+];
 
 const userInitial = computed(() =>
   (authStore.user?.hoTen || "U").charAt(0).toUpperCase(),
 );
 
-const pendingBorrowCount = computed(() => borrowStore.pendingCount);
+const pendingBorrowCount = computed(() => borrowStore.pendingCount || 0);
+const notificationCount = computed(() => notificationStore.unreadCount || 0);
 
 const currentPageTitle = computed(() => {
   const titles = {
@@ -327,7 +344,10 @@ const currentPageTitle = computed(() => {
     "/books": "Quản lý Sách",
     "/borrows": "Quản lý Mượn / Trả",
     "/readers": "Quản lý Độc giả",
+    "/publishers": "Quản lý NXB",
     "/chat": "Tin nhắn",
+    "/notifications": "Thông báo",
+    "/profile": "Hồ sơ cá nhân",
   };
   return titles[route.path] || "Happy Library";
 });
@@ -349,9 +369,15 @@ const navItems = computed(() => [
     label: "Tin nhắn",
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" /></svg>`,
   },
+  {
+    to: "/notifications",
+    label: "Thông báo",
+    badge: notificationCount.value > 0 ? notificationCount.value : null,
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>`,
+  },
 ]);
 
-const adminNavItems = [
+const adminNavItems = computed(() => [
   {
     to: "/borrows",
     label: "Mượn / Trả sách",
@@ -363,12 +389,18 @@ const adminNavItems = [
     label: "Quản lý Độc giả",
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>`,
   },
-];
+  {
+    to: "/publishers",
+    label: "Quản lý NXB",
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 21V5.25A2.25 2.25 0 0017.25 3H6.75A2.25 2.25 0 004.5 5.25V21m15 0h-15m15 0h1.125a1.125 1.125 0 001.125-1.125V8.25M4.5 21H3.375A1.125 1.125 0 012.25 19.875V8.25m2.25 12.75V9A2.25 2.25 0 016.75 6.75h10.5A2.25 2.25 0 0119.5 9v12M8.25 10.5h7.5M8.25 14.25h7.5" /></svg>`,
+  },
+]);
 
 const isActive = (path) => route.path === path;
 
 function toggleNotifications() {
-  /* TODO: open notification panel */
+  isProfileDropdownOpen.value = false;
+  router.push("/notifications");
 }
 
 async function handleLogout() {
@@ -388,8 +420,9 @@ function handleOutsideClick(e) {
 
 onMounted(() => {
   document.addEventListener("click", handleOutsideClick);
+  notificationStore.fetchUnreadCount().catch(() => {});
   if (authStore.isAdmin) {
-    borrowStore.fetchPendingCount();
+    borrowStore.fetchPendingCount().catch(() => {});
   } else {
     borrowStore.pendingCount = 0;
   }

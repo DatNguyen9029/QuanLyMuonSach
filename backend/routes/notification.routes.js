@@ -24,7 +24,7 @@ router.patch("/:id/read", notificationController.markAsRead);
 router.patch("/read-all", notificationController.markAllAsRead);
 
 // ─── ADMIN ONLY ──────────────────────────────────────────────────────────────
-router.use(authMiddleware.admin);
+router.use(authMiddleware.adminOnly);
 
 // DELETE /api/notifications/:id - Admin xóa thông báo
 router.delete("/:id", notificationController.deleteNotification);

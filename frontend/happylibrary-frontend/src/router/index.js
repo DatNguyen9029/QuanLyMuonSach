@@ -9,7 +9,9 @@ const DashboardView = () => import("@/views/DashboardView.vue");
 const BookManagementView = () => import("@/views/BookManagementView.vue");
 const BorrowManagementView = () => import("@/views/BorrowManagementView.vue");
 const ReaderManagementView = () => import("@/views/ReaderManagementView.vue");
+const PublisherManagementView = () => import("@/views/PublisherManagementView.vue");
 const ChatView = () => import("@/views/ChatView.vue");
+const NotificationsView = () => import("@/views/NotificationsView.vue");
 
 // ─── LAYOUTS ─────────────────────────────────────────────────────────────────
 const AuthLayout = () => import("@/layouts/AuthLayout.vue");
@@ -40,7 +42,10 @@ const routes = [
   },
   {
     path: "/",
-    redirect: "/auth/login",
+    beforeEnter: (to, from, next) => {
+      const authStore = useAuthStore();
+      next(authStore.isLoggedIn ? "/dashboard" : "/auth/login");
+    },
   },
 
   // ── MAIN ROUTES (cần đăng nhập) ────────────────────────────────────────
@@ -90,6 +95,15 @@ const routes = [
           requiresAuth: true,
         },
       },
+      {
+        path: "notifications",
+        name: "Notifications",
+        component: NotificationsView,
+        meta: {
+          title: "Thông báo | Happy Library",
+          requiresAuth: true,
+        },
+      },
 
       // ── ADMIN ONLY ROUTES ──────────────────────────────────────────────
       {
@@ -98,6 +112,16 @@ const routes = [
         component: ReaderManagementView,
         meta: {
           title: "Quản lý Độc giả | Happy Library",
+          requiresAuth: true,
+          requiresAdmin: true,
+        },
+      },
+      {
+        path: "publishers",
+        name: "Publishers",
+        component: PublisherManagementView,
+        meta: {
+          title: "Quản lý NXB | Happy Library",
           requiresAuth: true,
           requiresAdmin: true,
         },
@@ -153,7 +177,7 @@ const router = createRouter({
 /**
  * Luồng phân quyền:
  *
- *  1. requiresAuth + chưa đăng nhập   → redirect /login
+ *  1. requiresAuth + chưa đăng nhập   → redirect /auth/login
  *  2. requiresGuest + đã đăng nhập    → redirect /dashboard
  *  3. requiresAdmin + không phải Admin → redirect /403
  *  4. Mọi trường hợp còn lại          → tiếp tục bình thường
@@ -164,8 +188,8 @@ router.beforeEach(async (to, from, next) => {
 
   const authStore = useAuthStore();
 
-  // Nếu có token nhưng user data cũ → refresh nếu cần
-  if (authStore.token && !authStore.isUserFresh) {
+  // Nếu có token nhưng chưa có user hoặc user data cũ → refresh nếu cần
+  if (authStore.token && (!authStore.user || !authStore.isUserFresh)) {
     await authStore.fetchCurrentUser(true).catch(() => {
       authStore.clearAuth();
     });

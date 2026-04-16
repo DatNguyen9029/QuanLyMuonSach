@@ -46,7 +46,7 @@
         <p class="text-sm text-yellow-800">
           Quá trình xác thực đang mất thời gian.
           <RouterLink
-            to="/login"
+            to="/auth/login"
             class="font-semibold text-yellow-900 hover:underline"
           >
             Quay lại đăng nhập

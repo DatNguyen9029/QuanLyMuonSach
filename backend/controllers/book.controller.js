@@ -4,6 +4,52 @@
  */
 
 const Book = require("../models/Book.model");
+const Publisher = require("../models/Publisher.model");
+const { generateNextPublisherCode } = require("../utils/publisher.util");
+
+async function resolvePublisherFields(payload = {}) {
+  const tenNXB = typeof payload.tenNXB === "string" ? payload.tenNXB.trim() : "";
+  const publisherId = payload.nxb || null;
+
+  if (publisherId) {
+    const publisher = await Publisher.findById(publisherId);
+    if (!publisher) {
+      throw new Error("Nhà xuất bản không tồn tại.");
+    }
+
+    return {
+      ...payload,
+      nxb: publisher._id,
+      tenNXB: publisher.tenNXB,
+    };
+  }
+
+  if (!tenNXB) {
+    return {
+      ...payload,
+      nxb: null,
+      tenNXB: "",
+    };
+  }
+
+  let publisher = await Publisher.findOne({
+    tenNXB: { $regex: `^${tenNXB.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" },
+  });
+
+  if (!publisher) {
+    publisher = await Publisher.create({
+      maNXB: await generateNextPublisherCode(),
+      tenNXB,
+      diaChi: "",
+    });
+  }
+
+  return {
+    ...payload,
+    nxb: publisher._id,
+    tenNXB: publisher.tenNXB,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // [PUBLIC] GET /api/books - Lấy danh sách sách + Tìm kiếm
@@ -67,24 +113,9 @@ exports.getBookById = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 exports.createBook = async (req, res) => {
   try {
-    const {
-      tenSach,
-      donGia,
-      soLuongTienTai,
-      namXuatBan,
-      nxb,
-      tacGia,
-      hinhAnh,
-    } = req.body;
-    const book = await Book.create({
-      tenSach,
-      donGia,
-      soLuongTienTai,
-      namXuatBan,
-      nxb,
-      tacGia,
-      hinhAnh,
-    });
+    const bookPayload = await resolvePublisherFields(req.body);
+    const book = await Book.create(bookPayload);
+    await book.populate("nxb", "maNXB tenNXB diaChi");
     return res.status(201).json({ success: true, data: book });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
@@ -96,10 +127,15 @@ exports.createBook = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 exports.updateBook = async (req, res) => {
   try {
-    const book = await Book.findByIdAndUpdate(req.params.id, req.body, {
-      new: true, // Trả về document đã cập nhật
-      runValidators: true,
-    }).populate("nxb", "tenNXB");
+    const bookPayload = await resolvePublisherFields(req.body);
+    const book = await Book.findByIdAndUpdate(
+      req.params.id,
+      bookPayload,
+      {
+        new: true, // Trả về document đã cập nhật
+        runValidators: true,
+      },
+    ).populate("nxb", "maNXB tenNXB diaChi");
 
     if (!book)
       return res

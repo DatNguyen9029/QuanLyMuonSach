@@ -5,7 +5,19 @@ const mongoose = require("mongoose");
  */
 const publisherSchema = new mongoose.Schema(
   {
-    tenNXB: { type: String, required: true, trim: true },
+    maNXB: {
+      type: String,
+      required: true,
+      trim: true,
+      uppercase: true,
+      unique: true,
+    },
+    tenNXB: {
+      type: String,
+      required: true,
+      trim: true,
+      unique: true,
+    },
     diaChi: { type: String, trim: true },
   },
   { timestamps: true },

@@ -11,6 +11,7 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import App from "./App.vue";
 import router from "./router";
+import NotificationToast from "@/components/common/NotificationToast.vue";
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 // Import global styles (TailwindCSS + Custom)
@@ -53,6 +54,7 @@ function showToast(notification) {
 function renderNextToast() {
   if (toastQueue.length === 0) return;
 
+  activeToastIndex = 0;
   const notification = toastQueue.shift();
   const toastEl = document.createElement("div");
   toastContainer.appendChild(toastEl);
@@ -69,8 +71,8 @@ function renderNextToast() {
   }, 5000);
 }
 
-// ─── MOUNT APP ──────────────────────────────────────────────────────────────
-app.mount("#app");
+app.config.globalProperties.$showToast = showToast;
+app.provide("showToast", showToast);
 
 // ─── MOUNT APP ──────────────────────────────────────────────────────────────
 app.mount("#app");

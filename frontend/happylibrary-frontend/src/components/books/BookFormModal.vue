@@ -23,28 +23,38 @@
         </div>
         <div>
           <label class="form-label">Đơn giá</label>
-          <input
-            v-model.number="form.donGia"
-            type="number"
-            min="0"
-            class="form-control"
-            placeholder="50000"
-          />
+          <div class="relative">
+            <input
+              v-model.number="form.donGia"
+              type="number"
+              min="0"
+              step="1000"
+              class="form-control pr-16"
+              placeholder="50000"
+            />
+            <span class="currency-suffix">VND</span>
+          </div>
         </div>
       </div>
 
       <div>
         <label class="form-label">Nhà xuất bản</label>
-        <select v-model="form.nxb" class="form-control">
-          <option value="">Chọn nhà xuất bản</option>
+        <input
+          v-model="form.tenNXB"
+          type="text"
+          class="form-control"
+          list="publisher-suggestions"
+          placeholder="Nhập tên nhà xuất bản"
+        />
+        <datalist id="publisher-suggestions">
           <option
             v-for="publisher in publishers"
             :key="publisher._id"
-            :value="publisher._id"
+            :value="publisher.tenNXB"
           >
-            {{ publisher.tenNXB }}
+            {{ publisher.maNXB }}
           </option>
-        </select>
+        </datalist>
       </div>
 
       <div class="grid grid-cols-2 gap-4">
@@ -98,22 +108,26 @@ const form = ref({
   tenSach: "",
   tacGia: "",
   donGia: 0,
-  nxb: "",
+  tenNXB: "",
   namXuatBan: new Date().getFullYear(),
   soLuongTienTai: 0,
   hinhAnh: "",
 });
 
 onMounted(async () => {
-  const { data } = await api.get("/publishers");
-  publishers.value = data.data || [];
+  try {
+    const { data } = await api.get("/publishers");
+    publishers.value = data.data || [];
+  } catch (error) {
+    publishers.value = [];
+  }
 
   if (props.book) {
     form.value = {
       tenSach: props.book.tenSach || "",
       tacGia: props.book.tacGia || "",
       donGia: props.book.donGia || 0,
-      nxb: props.book.nxb || "",
+      tenNXB: props.book.tenNXB || "",
       namXuatBan: props.book.namXuatBan || new Date().getFullYear(),
       soLuongTienTai: props.book.soLuongTienTai || 0,
       hinhAnh: props.book.hinhAnh || "",
@@ -131,5 +145,14 @@ const handleSave = () => {
 </script>
 
 <style scoped>
-/* Component-specific styles */
+.currency-suffix {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6b7280;
+  font-size: 0.875rem;
+  font-weight: 600;
+  pointer-events: none;
+}
 </style>

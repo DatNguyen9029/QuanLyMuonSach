@@ -2,7 +2,8 @@ const mongoose = require("mongoose");
 
 /**
  * Book Schema
- * - nxb: Reference tới Publisher
+ * - nxb: Reference tới Publisher theo thiết kế CSDL
+ * - tenNXB: Fallback legacy để tương thích dữ liệu cũ và hiển thị nhanh
  * - soLuongTienTai: Số lượng sách hiện còn (tăng/giảm theo BorrowRecord)
  * - donGia: Dùng để tính tiền phạt khi mất sách
  */
@@ -30,9 +31,15 @@ const bookSchema = new mongoose.Schema(
       min: 1000,
       max: new Date().getFullYear(),
     },
+    tenNXB: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     nxb: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Publisher",
+      default: null,
     },
     tacGia: {
       type: String,

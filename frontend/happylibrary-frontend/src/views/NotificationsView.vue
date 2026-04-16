@@ -318,5 +318,3 @@ onMounted(() => {
   backdrop-filter: blur(10px);
 }
 </style>
-
-Wait, the path is incorrect for NotificationsView.vue
