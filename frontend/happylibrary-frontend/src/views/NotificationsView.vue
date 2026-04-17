@@ -256,11 +256,11 @@ const filters = computed(() => ({
   all: { label: "Tất cả", count: notificationStore.notifications.length },
   unread: {
     label: "Chưa đọc",
-    count: notificationStore.unreadNotifications().length,
+    count: notificationStore.unreadList.length,
   },
-  today: { label: "Hôm nay", count: todayNotifications.value.length },
-  borrow_update: { label: "Mượn/Trả", count: borrowNotifications.value.length },
-  chat_new: { label: "Tin nhắn", count: chatNotifications.value.length },
+  today: { label: "Hôm nay", count: recentCount.value },
+  borrow_update: { label: "Mượn/Trả", count: borrowNotifications.value },
+  chat_new: { label: "Tin nhắn", count: chatNotifications.value },
 }));
 
 const filteredNotifications = computed(() => {
@@ -308,6 +308,47 @@ async function markAsRead(id) {
   await notificationStore.markAsRead(id);
 }
 
+function getTypeClass(type) {
+  const classes = {
+    info: "bg-blue-100",
+    success: "bg-green-100",
+    warning: "bg-yellow-100",
+    error: "bg-red-100",
+    borrow_update: "bg-indigo-100",
+    chat_new: "bg-purple-100",
+  };
+  return classes[type] || "bg-slate-100";
+}
+
+function getIconColor(type) {
+  const colors = {
+    info: "text-blue-600",
+    success: "text-green-600",
+    warning: "text-yellow-600",
+    error: "text-red-600",
+    borrow_update: "text-indigo-600",
+    chat_new: "text-purple-600",
+  };
+  return colors[type] || "text-slate-600";
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return "Vừa xong";
+  if (diffMins < 60) return `${diffMins} phút trước`;
+  if (diffHours < 24) return `${diffHours} giờ trước`;
+  if (diffDays < 7) return `${diffDays} ngày trước`;
+
+  return date.toLocaleDateString("vi-VN");
+}
+
 onMounted(() => {
   notificationStore.fetchNotifications();
 });
@@ -318,5 +359,3 @@ onMounted(() => {
   backdrop-filter: blur(10px);
 }
 </style>
-
-export default { name: "Notifications" }

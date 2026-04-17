@@ -1,101 +1,21 @@
 // backend/server.js
 const http = require("http");
 const mongoose = require("mongoose");
-const { Server } = require("socket.io");
 const config = require("./config");
 const app = require("./app"); // Nhập app đã cấu hình từ app.js
 const { seedAdminAccount } = require("./utils/seedAdmin.util");
+const { initSocket } = require("./socket"); // Import socket module mới
 
 // ─── App & HTTP Server ────────────────────────────────────────────────────────
 const server = http.createServer(app);
 
 // ─── Socket.io Setup ──────────────────────────────────────────────────────────
-const io = new Server(server, {
-  cors: {
-    origin: config.app.clientUrl,
-    methods: ["GET", "POST"],
-  },
+const io = initSocket(server, {
+  jwtSecret: config.jwt?.secret || process.env.JWT_SECRET,
+  clientUrl: config.app.clientUrl,
 });
 
-app.set("io", io); // Gắn io vào app để dùng trong controllers
-
-// ─── Socket.io Logic (Giữ nguyên 100% logic của bạn) ──────────────────────────
-io.on("connection", (socket) => {
-  console.log(`[Socket.io] Client connected: ${socket.id}`);
-
-  // --- Chat: User/Admin nhắn tin ---
-  socket.on("sendMessage", async (data) => {
-    const ChatMessage = require("./models/ChatMessage.model");
-    const Notification = require("./models/Notification.model");
-    const msg = new ChatMessage({ sender: data.sender, message: data.message });
-    const saved = await msg.save();
-    io.emit("newMessage", saved);
-
-    if (data.recipientUserId) {
-      const userNotif = new Notification({
-        user: data.recipientUserId,
-        title: "Tin nhắn mới",
-        message: `${data.senderName || "Admin"}: "${data.message.slice(0, 50)}..."`,
-        type: "chat_new",
-        relatedId: saved._id,
-        relatedType: "chat",
-        data: { senderId: data.sender },
-      });
-      await userNotif.save();
-      io.to(`user_${data.recipientUserId}`).emit("newNotification", userNotif);
-    } else {
-      const adminNotif = new Notification({
-        title: "Tin nhắn mới",
-        message: `Người dùng ${data.sender} gửi: "${data.message.slice(0, 50)}..."`,
-        type: "chat_new",
-        relatedId: saved._id,
-        relatedType: "chat",
-        data: { senderId: data.sender },
-      });
-      await adminNotif.save();
-      io.emit("adminNotification", adminNotif);
-    }
-  });
-
-  socket.on("joinUserRoom", (userId) => {
-    socket.join(`user_${userId}`);
-    console.log(`[Socket.io] User ${userId} joined room user_${userId}`);
-  });
-
-  socket.on("markNotificationRead", async (notificationId) => {
-    try {
-      const Notification = require("./models/Notification.model");
-      const notification = await Notification.findByIdAndUpdate(
-        notificationId,
-        { read: true },
-        { new: true },
-      );
-      if (notification)
-        socket.emit("notificationRead", { id: notification._id });
-    } catch (err) {
-      console.error("[Socket] Mark notification read error:", err.message);
-    }
-  });
-
-  socket.on("markAllNotificationsRead", async (userId) => {
-    try {
-      const Notification = require("./models/Notification.model");
-      const result = await Notification.updateMany(
-        { user: userId, read: false },
-        { read: true },
-      );
-      socket.emit("allNotificationsRead", {
-        modifiedCount: result.modifiedCount,
-      });
-    } catch (err) {
-      console.error("[Socket] Mark all notifications read error:", err.message);
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log(`[Socket.io] Client disconnected: ${socket.id}`);
-  });
-});
+app.set("io", io); // Gắn io vào app để dùng trong controllers (backward compatible)
 
 // ─── Connect MongoDB & Start Server ──────────────────────────────────────────
 const PORT = config.app.port || 3000;

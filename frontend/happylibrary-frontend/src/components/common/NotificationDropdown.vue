@@ -1,295 +1,630 @@
 <template>
-  <div class="notification-dropdown">
-    <!-- Header -->
-    <div class="dropdown-header px-6 py-4 border-b border-slate-100">
-      <div class="flex items-center justify-between">
-        <h3 class="text-lg font-semibold text-slate-900">Thông báo</h3>
-        <div class="text-sm text-slate-500 font-medium">
-          {{ unreadCount }} chưa đọc
-        </div>
-      </div>
-      <button
-        @click="markAllAsRead"
-        class="mt-2 text-xs px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full font-medium transition-all"
-      >
-        Đánh dấu tất cả đã đọc
-      </button>
-    </div>
+  <!--
+    NotificationDropdown.vue - Happy Library
+    ──────────────────────────────────────────
+    Dropdown hiển thị danh sách thông báo với:
+      - Badge đếm số chưa đọc
+      - Màu sắc theo type (warning=vàng, error=đỏ, success=xanh...)
+      - Nút "Đánh dấu tất cả đã đọc"
+      - Phân trang (load more)
+      - Skeleton loading
 
-    <!-- List -->
-    <div class="notification-list max-h-96 overflow-y-auto">
+    CÁCH DÙNG (trong Navbar):
+      <NotificationDropdown />
+  -->
+  <div class="notif-wrapper" v-click-outside="closeDropdown">
+    <!-- ── Bell button với badge ───────────────────────────────────────────── -->
+    <button
+      class="notif-bell"
+      :aria-label="`Thông báo${notifStore.hasUnread ? ` (${notifStore.unreadCount} chưa đọc)` : ''}`"
+      @click="toggleDropdown"
+    >
+      <svg
+        width="22"
+        height="22"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      </svg>
+
+      <!-- Badge số chưa đọc -->
+      <Transition name="badge">
+        <span
+          v-if="notifStore.hasUnread"
+          class="notif-badge"
+          aria-hidden="true"
+        >
+          {{ notifStore.unreadCount > 99 ? "99+" : notifStore.unreadCount }}
+        </span>
+      </Transition>
+    </button>
+
+    <!-- ── Dropdown panel ─────────────────────────────────────────────────── -->
+    <Transition name="dropdown">
       <div
-        v-for="notification in displayedNotifications"
-        :key="notification._id"
-        class="notification-item px-6 py-4 border-b border-slate-50 hover:bg-slate-50 last:border-b-0 cursor-pointer transition-all"
-        @click="toggleRead(notification)"
+        v-if="isOpen"
+        class="notif-panel"
+        role="dialog"
+        aria-label="Danh sách thông báo"
       >
-        <div class="flex items-start gap-3">
-          <!-- Icon -->
-          <div class="flex-shrink-0 mt-1">
-            <div
-              class="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm"
-              :class="getIconClass(notification.type)"
-            >
-              <svg
-                v-if="notification.type === 'success'"
-                class="w-5 h-5"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              <svg
-                v-else-if="notification.type === 'error'"
-                class="w-5 h-5"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              <svg
-                v-else-if="notification.type === 'warning'"
-                class="w-5 h-5"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              <svg
-                v-else-if="notification.type === 'chat_new'"
-                class="w-5 h-5"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-6v2h6V9zM9 5h2v2H9V5z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-              <svg
-                v-else
-                class="w-5 h-5"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fill-rule="evenodd"
-                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                  clip-rule="evenodd"
-                />
-              </svg>
-            </div>
-          </div>
+        <!-- Header -->
+        <div class="notif-panel__header">
+          <h3 class="notif-panel__title">Thông báo</h3>
+          <button
+            v-if="notifStore.hasUnread"
+            class="notif-panel__read-all"
+            @click="notifStore.markAllAsRead()"
+          >
+            Đánh dấu tất cả đã đọc
+          </button>
+        </div>
 
-          <!-- Content -->
-          <div class="flex-1 min-w-0">
-            <div class="flex items-start justify-between mb-1">
-              <h4
-                class="font-semibold text-slate-900 text-sm leading-tight truncate"
-              >
-                {{ notification.title }}
-              </h4>
-              <span class="text-xs text-slate-400 ml-2 whitespace-nowrap">{{
-                formatTime(notification.createdAt)
-              }}</span>
+        <!-- Filter tabs -->
+        <div class="notif-panel__tabs" role="tablist">
+          <button
+            role="tab"
+            :aria-selected="activeTab === 'all'"
+            class="notif-tab"
+            :class="{ 'notif-tab--active': activeTab === 'all' }"
+            @click="switchTab('all')"
+          >
+            Tất cả
+          </button>
+          <button
+            role="tab"
+            :aria-selected="activeTab === 'unread'"
+            class="notif-tab"
+            :class="{ 'notif-tab--active': activeTab === 'unread' }"
+            @click="switchTab('unread')"
+          >
+            Chưa đọc
+            <span v-if="notifStore.unreadCount > 0" class="notif-tab__count">
+              {{ notifStore.unreadCount }}
+            </span>
+          </button>
+        </div>
+
+        <!-- List -->
+        <div class="notif-panel__list" @scroll="onScroll">
+          <!-- Skeleton loading -->
+          <template
+            v-if="notifStore.isLoading && notifStore.notifications.length === 0"
+          >
+            <div v-for="i in 4" :key="i" class="notif-skeleton">
+              <div class="notif-skeleton__icon"></div>
+              <div class="notif-skeleton__body">
+                <div class="notif-skeleton__title"></div>
+                <div class="notif-skeleton__message"></div>
+              </div>
             </div>
-            <p class="text-slate-600 text-sm leading-relaxed line-clamp-2">
-              {{ notification.message }}
+          </template>
+
+          <!-- Empty state -->
+          <div
+            v-else-if="displayedNotifications.length === 0"
+            class="notif-empty"
+          >
+            <span class="notif-empty__icon">🔔</span>
+            <p>
+              {{
+                activeTab === "unread"
+                  ? "Không có thông báo chưa đọc"
+                  : "Chưa có thông báo nào"
+              }}
             </p>
           </div>
 
-          <!-- Unread dot -->
-          <div
-            v-if="!notification.read"
-            class="flex-shrink-0 w-2 h-2 mt-2 ml-1"
-          >
-            <div class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-          </div>
+          <!-- Notification items -->
+          <template v-else>
+            <button
+              v-for="notif in displayedNotifications"
+              :key="notif._id"
+              class="notif-item"
+              :class="[
+                `notif-item--${notif.type}`,
+                { 'notif-item--unread': !notif.read },
+              ]"
+              @click="handleItemClick(notif)"
+            >
+              <!-- Type indicator dot + icon -->
+              <span
+                class="notif-item__icon"
+                :aria-label="iconLabel(notif.type)"
+              >
+                {{ iconFor(notif.type) }}
+              </span>
+
+              <!-- Content -->
+              <div class="notif-item__content">
+                <p class="notif-item__title">{{ notif.title }}</p>
+                <p class="notif-item__message">{{ notif.message }}</p>
+                <time class="notif-item__time" :datetime="notif.createdAt">
+                  {{ timeAgo(notif.createdAt) }}
+                </time>
+              </div>
+
+              <!-- Unread dot -->
+              <span
+                v-if="!notif.read"
+                class="notif-item__dot"
+                aria-hidden="true"
+              ></span>
+            </button>
+
+            <!-- Load more -->
+            <button
+              v-if="hasMore"
+              class="notif-load-more"
+              :disabled="notifStore.isLoading"
+              @click="loadMore"
+            >
+              {{ notifStore.isLoading ? "Đang tải..." : "Xem thêm" }}
+            </button>
+          </template>
         </div>
       </div>
-
-      <!-- Empty state -->
-      <div
-        v-if="displayedNotifications.length === 0"
-        class="px-6 py-8 text-center text-slate-500"
-      >
-        <svg
-          class="w-12 h-12 mx-auto mb-2 text-slate-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.5h3m1.5-3h3m-4.5 0H10m1.5-3V7a2 2 0 00-2-2h-1a2 2 0 00-2 2v6.5"
-          />
-        </svg>
-        <p class="text-sm">Không có thông báo nào</p>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <div
-      class="dropdown-footer px-6 py-3 border-t border-slate-100 bg-slate-50"
-    >
-      <router-link
-        to="/notifications"
-        class="block w-full text-center text-sm font-medium text-blue-600 hover:text-blue-700 py-2 px-4 rounded-lg hover:bg-white transition-all"
-      >
-        Xem tất cả
-      </router-link>
-    </div>
+    </Transition>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, watch } from "vue";
 import { useNotificationStore } from "@/stores/notification.store";
 import { useRouter } from "vue-router";
 
-const props = defineProps({
-  modelValue: Boolean,
-});
-
-const emit = defineEmits(["update:modelValue"]);
-
-const notificationStore = useNotificationStore();
+const notifStore = useNotificationStore();
 const router = useRouter();
 
-const displayedNotifications = computed(() =>
-  notificationStore.notifications.slice(0, 5),
-);
+const isOpen = ref(false);
+const activeTab = ref("all"); // 'all' | 'unread'
 
-const unreadCount = computed(() => notificationStore.unreadCount);
-
-onMounted(() => {
-  notificationStore.fetchUnreadCount();
-  notificationStore.fetchNotifications({ limit: 5 });
+// ── Computed ────────────────────────────────────────────────────────────────
+const displayedNotifications = computed(() => {
+  if (activeTab.value === "unread") return notifStore.unreadList;
+  return notifStore.notifications;
 });
 
-function toggleRead(notification) {
-  if (!notification.read) {
-    notificationStore.markAsRead(notification._id);
+const hasMore = computed(() => {
+  const { page, totalPages } = notifStore.pagination;
+  return page < totalPages;
+});
+
+// ── Methods ─────────────────────────────────────────────────────────────────
+function toggleDropdown() {
+  isOpen.value = !isOpen.value;
+  if (isOpen.value) {
+    notifStore.fetchNotifications(); // Refresh khi mở
   }
 }
 
-async function markAllAsRead() {
-  await notificationStore.markAllAsRead();
+function closeDropdown() {
+  isOpen.value = false;
 }
 
-function formatTime(dateString) {
-  const date = new Date(dateString);
+function switchTab(tab) {
+  activeTab.value = tab;
+  if (tab === "all") {
+    notifStore.fetchNotifications({ page: 1 });
+  }
+}
+
+async function handleItemClick(notif) {
+  // Đánh dấu đọc
+  if (!notif.read) {
+    await notifStore.markAsRead(notif._id);
+  }
+
+  // Navigate đến trang liên quan
+  if (notif.relatedType === "borrow" && notif.relatedId) {
+    router.push(`/borrows/${notif.relatedId}`);
+    closeDropdown();
+  } else if (notif.relatedType === "chat" && notif.relatedId) {
+    router.push(`/chat/${notif.relatedId}`);
+    closeDropdown();
+  }
+}
+
+async function loadMore() {
+  const nextPage = notifStore.pagination.page + 1;
+  await notifStore.fetchNotifications({ page: nextPage });
+}
+
+// ── Icon helpers (đồng bộ với NotificationToast) ────────────────────────────
+function iconFor(type) {
+  const icons = {
+    info: "ℹ️",
+    success: "✅",
+    warning: "⚠️",
+    error: "🚨",
+    borrow_update: "📚",
+    chat_new: "💬",
+  };
+  return icons[type] || "🔔";
+}
+
+function iconLabel(type) {
+  const labels = {
+    info: "Thông tin",
+    success: "Thành công",
+    warning: "Cảnh báo",
+    error: "Khẩn cấp",
+    borrow_update: "Cập nhật mượn sách",
+    chat_new: "Tin nhắn mới",
+  };
+  return labels[type] || "Thông báo";
+}
+
+/**
+ * Format thời gian tương đối (e.g. "2 phút trước", "1 giờ trước")
+ */
+function timeAgo(dateStr) {
+  if (!dateStr) return "";
   const now = new Date();
-  const diff = now - date;
+  const date = new Date(dateStr);
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
 
-  if (diff < 60000) return "Vừa xong";
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}phút`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}giờ`;
+  if (diffMins < 1) return "Vừa xong";
+  if (diffMins < 60) return `${diffMins} phút trước`;
+  if (diffHours < 24) return `${diffHours} giờ trước`;
+  if (diffDays < 7) return `${diffDays} ngày trước`;
 
-  return date.toLocaleDateString("vi-VN", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return date.toLocaleDateString("vi-VN");
 }
-
-function getIconClass(type) {
-  const base = "shadow-sm";
-  const colors = {
-    success: "bg-green-100 border-green-200",
-    error: "bg-red-100 border-red-200",
-    warning: "bg-orange-100 border-orange-200",
-    info: "bg-blue-100 border-blue-200",
-    borrow_update: "bg-indigo-100 border-indigo-200",
-    chat_new: "bg-purple-100 border-purple-200",
-  };
-  return `${base} ${colors[type] || colors.info}`;
-}
-
-// Close on outside click
-onMounted(() => {
-  const handleClickOutside = (event) => {
-    if (
-      !event.target.closest(".header-icon-btn") &&
-      !event.target.closest(".notification-dropdown")
-    ) {
-      emit("update:modelValue", false);
-    }
-  };
-  document.addEventListener("click", handleClickOutside);
-  return () => document.removeEventListener("click", handleClickOutside);
-});
 </script>
 
 <style scoped>
-.line-clamp-2 {
+/* ── Wrapper + Bell ─────────────────────────────────────────────────────────── */
+.notif-wrapper {
+  position: relative;
+}
+.notif-bell {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  padding: 0.5rem;
+  border-radius: var(--border-radius-md);
+  display: flex;
+  align-items: center;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+.notif-bell:hover {
+  color: var(--color-text-primary);
+  background: var(--color-background-secondary);
+}
+
+/* ── Badge ──────────────────────────────────────────────────────────────────── */
+.notif-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: #e24b4a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.badge-enter-active,
+.badge-leave-active {
+  transition: all 0.2s;
+}
+.badge-enter-from,
+.badge-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+/* ── Dropdown panel ─────────────────────────────────────────────────────────── */
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 22rem;
+  max-height: 32rem;
+  background: var(--color-background-primary);
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+}
+.dropdown-enter-active {
+  transition: all 0.2s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.dropdown-leave-active {
+  transition: all 0.15s ease-in;
+}
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.97);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────────── */
+.notif-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1rem 0.5rem;
+  flex-shrink: 0;
+}
+.notif-panel__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.notif-panel__read-all {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--color-text-info);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.notif-panel__read-all:hover {
+  background: var(--color-background-info);
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────────────── */
+.notif-panel__tabs {
+  display: flex;
+  padding: 0 1rem;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  flex-shrink: 0;
+}
+.notif-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+  margin-bottom: -1px;
+}
+.notif-tab--active {
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-text-primary);
+}
+.notif-tab__count {
+  background: #e24b4a;
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+/* ── List ───────────────────────────────────────────────────────────────────── */
+.notif-panel__list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ── Item ───────────────────────────────────────────────────────────────────── */
+.notif-item {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+  position: relative;
+}
+.notif-item:last-child {
+  border-bottom: none;
+}
+.notif-item:hover {
+  background: var(--color-background-secondary);
+}
+
+/* Unread: nền nhạt theo type */
+.notif-item--unread {
+  background: var(--color-background-secondary);
+}
+
+/* Màu nền theo type khi chưa đọc */
+.notif-item--warning.notif-item--unread {
+  background: rgba(250, 238, 218, 0.5);
+}
+.notif-item--error.notif-item--unread {
+  background: rgba(252, 235, 235, 0.5);
+}
+.notif-item--success.notif-item--unread {
+  background: rgba(234, 243, 222, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  .notif-item--warning.notif-item--unread {
+    background: rgba(65, 36, 2, 0.4);
+  }
+  .notif-item--error.notif-item--unread {
+    background: rgba(80, 19, 19, 0.4);
+  }
+  .notif-item--success.notif-item--unread {
+    background: rgba(23, 52, 4, 0.4);
+  }
+}
+
+.notif-item__icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.notif-item__content {
+  flex: 1;
+  min-width: 0;
+}
+.notif-item__title {
+  margin: 0 0 0.2rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Title màu theo type khi chưa đọc */
+.notif-item--warning .notif-item__title {
+  color: #633806;
+}
+.notif-item--error .notif-item__title {
+  color: #791f1f;
+}
+
+@media (prefers-color-scheme: dark) {
+  .notif-item--warning .notif-item__title {
+    color: #fac775;
+  }
+  .notif-item--error .notif-item__title {
+    color: #f7c1c1;
+  }
+}
+
+.notif-item__message {
+  margin: 0 0 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-
-.notification-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: 380px;
-  max-width: min(90vw, 380px);
-  background: white;
-  border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-  animation: dropdownSlide 0.2s ease-out;
-  z-index: 1000;
+.notif-item__time {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
 }
 
-@keyframes dropdownSlide {
-  from {
-    opacity: 0;
-    transform: translateY(-8px) scale(0.96);
-  }
-  to {
+/* Unread dot */
+.notif-item__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #185fa5;
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+.notif-item--warning .notif-item__dot {
+  background: #ef9f27;
+}
+.notif-item--error .notif-item__dot {
+  background: #e24b4a;
+}
+
+/* ── Skeleton ────────────────────────────────────────────────────────────────── */
+.notif-skeleton {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--color-border-tertiary);
+}
+.notif-skeleton__icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-background-secondary);
+  flex-shrink: 0;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.notif-skeleton__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.notif-skeleton__title {
+  height: 14px;
+  border-radius: 4px;
+  background: var(--color-background-secondary);
+  animation: pulse 1.4s ease-in-out infinite;
+  width: 60%;
+}
+.notif-skeleton__message {
+  height: 12px;
+  border-radius: 4px;
+  background: var(--color-background-secondary);
+  animation: pulse 1.4s ease-in-out infinite 0.2s;
+  width: 90%;
+}
+@keyframes pulse {
+  0%,
+  100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+  }
+  50% {
+    opacity: 0.4;
   }
 }
 
-.notification-list {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(100, 116, 139, 0.3) transparent;
+/* ── Empty state ─────────────────────────────────────────────────────────────── */
+.notif-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: var(--color-text-tertiary);
+  font-size: 0.875rem;
+  gap: 0.5rem;
+}
+.notif-empty__icon {
+  font-size: 2rem;
 }
 
-.notification-list::-webkit-scrollbar {
-  width: 6px;
+/* ── Load more ───────────────────────────────────────────────────────────────── */
+.notif-load-more {
+  width: 100%;
+  padding: 0.75rem;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--color-border-tertiary);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--color-text-info);
+  transition: background 0.15s;
 }
-
-.notification-list::-webkit-scrollbar-track {
-  background: transparent;
+.notif-load-more:hover:not(:disabled) {
+  background: var(--color-background-secondary);
 }
-
-.notification-list::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.3);
-  border-radius: 3px;
-}
-
-.notification-item:hover {
-  background: rgba(248, 250, 252, 1);
+.notif-load-more:disabled {
+  color: var(--color-text-tertiary);
+  cursor: default;
 }
 </style>

@@ -4,6 +4,8 @@ const BorrowRecord = require("../models/BorrowRecord.model");
 const Book = require("../models/Book.model");
 const User = require("../models/User.model");
 const Notification = require("../models/Notification.model");
+const { getIO } = require("../socket");
+const notifService = require("../services/notification.service");
 
 const BORROW_STATUS = {
   PENDING: "ChoDuyet",
@@ -155,21 +157,29 @@ exports.createBorrowRequest = async (req, res) => {
 
     await record.populate(BORROW_POPULATE);
 
-    const io = req.app.get("io");
-    const adminNotif = await Notification.create({
-      title: "Yêu cầu mượn sách mới",
-      message: `Người dùng ${req.user.hoTen || "không xác định"} vừa tạo yêu cầu mượn sách.`,
-      type: "borrow_update",
-      relatedId: record._id,
-      relatedType: "borrow",
-      data: {
-        userId: req.user._id,
-        borrowId: record._id,
-        trangThai: BORROW_STATUS.PENDING,
-      },
-    });
-
-    io?.emit("adminNotification", adminNotif);
+    // ─── THÊM: Notify Admin ─────────────────────────────────────────────
+    try {
+      const io = getIO();
+      io.to("admin").emit("notification:new", {
+        title: "Yêu cầu mượn sách mới",
+        message: `Người dùng ${req.user.hoTen || "không xác định"} vừa tạo yêu cầu mượn sách "${book.tenSach}".`,
+        type: "borrow_update",
+        relatedId: record._id,
+        relatedType: "borrow",
+        data: {
+          userId: req.user._id,
+          borrowId: record._id,
+          bookTitle: book.tenSach,
+          userName: req.user.hoTen,
+          trangThai: BORROW_STATUS.PENDING,
+        },
+        read: false,
+        createdAt: new Date(),
+      });
+    } catch (err) {
+      console.error("[Notification] Lỗi emit admin:", err);
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     return res
       .status(201)
@@ -317,25 +327,25 @@ exports.createBorrowByAdmin = async (req, res) => {
       _id: { $in: createdRecords.map((r) => r._id) },
     }).populate(BORROW_POPULATE);
 
-    const io = req.app.get("io");
-    const userNotif = await Notification.create({
-      user: userId,
-      title: "Phiếu mượn mới đã được tạo",
-      message: `Bạn có ${populatedRecords.length} sách vừa được ghi nhận mượn.`,
-      type: "borrow_update",
-      relatedId: populatedRecords[0]?._id || null,
-      relatedType: "borrow",
-      data: {
-        createdCount: populatedRecords.length,
-        trangThai: BORROW_STATUS.BORROWING,
-      },
-    });
-
-    io?.to(`user_${userId}`).emit("newNotification", userNotif);
-    io?.emit("adminBorrowUpdated", {
-      recordIds: populatedRecords.map((record) => record._id),
-      trangThai: BORROW_STATUS.BORROWING,
-    });
+    // ─── THÊM: Notify User ──────────────────────────────────────────────
+    try {
+      const io = getIO();
+      await notifService.createAndEmit(io, {
+        userId,
+        title: "Phiếu mượn mới đã được tạo",
+        message: `Bạn có ${populatedRecords.length} sách vừa được ghi nhận mượn.`,
+        type: "borrow_update",
+        relatedId: populatedRecords[0]?._id || null,
+        relatedType: "borrow",
+        data: {
+          createdCount: populatedRecords.length,
+          trangThai: BORROW_STATUS.BORROWING,
+        },
+      });
+    } catch (err) {
+      console.error("[Notification] Lỗi emit user:", err);
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     return res.status(201).json({
       success: true,
@@ -478,38 +488,43 @@ exports.updateBorrowStatus = async (req, res) => {
     await record.save();
     await record.populate(BORROW_POPULATE);
 
-    const io = req.app.get("io");
+    // ─── THÊM: Notify User theo từng trường hợp ─────────────────────────
+    try {
+      const io = getIO();
+      let notifTitle = "Cập nhật phiếu mượn";
+      let notifMessage = `Trạng thái mới: ${record.trangThai}`;
 
-    const userNotif = await Notification.create({
-      user: record.user._id || record.user,
-      title: `Phiếu mượn ${String(record._id).slice(-6).toUpperCase()} đã được cập nhật`,
-      message: `Trạng thái mới: ${record.trangThai}${record.tienPhat > 0 ? `, tiền phạt: ${record.tienPhat.toLocaleString("vi-VN")}đ` : ""}`,
-      type: "borrow_update",
-      relatedId: record._id,
-      relatedType: "borrow",
-      data: {
-        trangThai: record.trangThai,
-        tienPhat: record.tienPhat,
-      },
-    });
+      if (trangThai === BORROW_STATUS.BORROWING) {
+        notifTitle = "Phiếu mượn được duyệt ✓";
+        notifMessage = `Phiếu mượn sách "${record.book.tenSach}" của bạn đã được duyệt. Vui lòng đến thư viện lấy sách trước ngày ${formatDate(record.ngayHenTra)}.`;
+      } else if (trangThai === BORROW_STATUS.REJECTED) {
+        notifTitle = "Phiếu mượn bị từ chối";
+        notifMessage = `Phiếu mượn sách "${record.book.tenSach}" đã bị từ chối. Lý do: ${record.lyDoTuChoi || "Không đủ điều kiện mượn sách."}`;
+      } else if (trangThai === BORROW_STATUS.RETURNED) {
+        notifTitle = "Xác nhận trả sách";
+        notifMessage = `Sách "${record.book.tenSach}" đã được xác nhận trả${record.tienPhat > 0 ? `. Tiền phạt: ${record.tienPhat.toLocaleString("vi-VN")}đ` : ""}.`;
+      } else if (trangThai === BORROW_STATUS.LOST) {
+        notifTitle = "Thông báo mất sách";
+        notifMessage = `Sách "${record.book.tenSach}" trong phiếu mượn của bạn đã được xác nhận là mất. Tiền phạt: ${record.tienPhat.toLocaleString("vi-VN")}đ. Vui lòng liên hệ thư viện.`;
+      }
 
-    io?.to(`user_${record.user._id || record.user}`).emit(
-      "newNotification",
-      userNotif,
-    );
-    io?.to(`user_${record.user._id || record.user}`).emit(
-      "borrowStatusUpdated",
-      {
-        recordId: record._id,
-        trangThai: record.trangThai,
-        tienPhat: record.tienPhat,
-      },
-    );
-
-    io?.emit("adminBorrowUpdated", {
-      recordId: record._id,
-      trangThai: record.trangThai,
-    });
+      await notifService.createAndEmit(io, {
+        userId: record.user._id || record.user,
+        title: notifTitle,
+        message: notifMessage,
+        type: "borrow_update",
+        relatedId: record._id,
+        relatedType: "borrow",
+        data: {
+          trangThai: record.trangThai,
+          tienPhat: record.tienPhat,
+          bookTitle: record.book.tenSach,
+        },
+      });
+    } catch (err) {
+      console.error("[Notification] Lỗi emit user:", err);
+    }
+    // ─────────────────────────────────────────────────────────────────────
 
     return res.json({ success: true, data: toClientBorrow(record) });
   } catch (err) {
@@ -685,3 +700,13 @@ exports.getMyBorrows = async (req, res) => {
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ── Helper function ────────────────────────────────────────────────────────
+function formatDate(date) {
+  if (!date) return "";
+  return new Date(date).toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
