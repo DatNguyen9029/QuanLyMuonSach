@@ -243,7 +243,6 @@ const filters = computed(() => ({
   },
   today: { label: "Hôm nay", count: recentCount.value },
   borrow_update: { label: "Mượn/Trả", count: borrowNotifications.value },
-  chat_new: { label: "Tin nhắn", count: chatNotifications.value },
 }));
 
 const filteredNotifications = computed(() => {
@@ -257,8 +256,6 @@ const filteredNotifications = computed(() => {
     result = result.filter((n) => new Date(n.createdAt) >= today);
   } else if (currentFilter.value === "borrow_update") {
     result = result.filter((n) => n.type === "borrow_update");
-  } else if (currentFilter.value === "chat_new") {
-    result = result.filter((n) => n.type === "chat_new");
   }
 
   return result;
@@ -272,15 +269,10 @@ const recentCount = computed(() => {
   ).length;
 });
 
-const todayNotifications = computed(() => recentCount.value);
 const borrowNotifications = computed(
   () =>
     notificationStore.notifications.filter((n) => n.type === "borrow_update")
       .length,
-);
-const chatNotifications = computed(
-  () =>
-    notificationStore.notifications.filter((n) => n.type === "chat_new").length,
 );
 
 async function markAllAsRead() {

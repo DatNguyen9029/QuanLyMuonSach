@@ -26,7 +26,7 @@
 
           <div
             v-for="msg in messages"
-            :key="msg.id"
+            :key="msg._id || msg.id"
             class="message-wrapper"
             :class="
               msg.senderId === authStore.user?._id
@@ -35,7 +35,7 @@
             "
           >
             <div v-if="msg.senderId !== authStore.user?._id" class="msg-avatar">
-              {{ msg.senderName?.charAt(0) }}
+              {{ msg.senderName?.charAt(0) || "A" }}
             </div>
             <div
               class="message-bubble"
@@ -137,8 +137,8 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, watch } from "vue";
-import { io } from "socket.io-client";
 import { useAuthStore } from "@/stores/auth.store";
+import { connectSocket } from "@/services/socket";
 
 const authStore = useAuthStore();
 
@@ -154,70 +154,83 @@ const messagesContainer = ref(null);
 let socket = null;
 let typingTimeout = null;
 
-// ─── SOCKET.IO ────────────────────────────────────────────────────────────────
-function initSocket() {
-  socket = io(import.meta.env.VITE_SOCKET_URL || "http://localhost:3000", {
-    auth: { token: authStore.token },
-    reconnectionAttempts: 5,
-    reconnectionDelay: 2000,
-  });
+function upsertMessage(message) {
+  if (!message) return;
+  const id = message._id || message.id;
+  if (id && messages.value.some((item) => (item._id || item.id) === id)) {
+    return false;
+  }
+  messages.value.push(message);
+  return true;
+}
 
-  socket.on("connect", () => {
-    isConnected.value = true;
-    // Join phòng chat của user này
-    socket.emit("join", { userId: authStore.user?._id });
-  });
+function handleConnect() {
+  isConnected.value = true;
+  socket?.emit("chat:load", { limit: 200 });
+}
 
-  socket.on("disconnect", () => {
-    isConnected.value = false;
-  });
+function handleDisconnect() {
+  isConnected.value = false;
+}
 
-  // Nhận tin nhắn mới
-  socket.on("new_message", (msg) => {
-    messages.value.push(msg);
-    if (!isOpen.value) unreadCount.value++;
-    scrollToBottom();
-  });
+function handleNewMessage(message) {
+  const inserted = upsertMessage(message);
+  if (inserted && !isOpen.value) unreadCount.value += 1;
+  scrollToBottom();
+}
 
-  // Typing indicator
-  socket.on("typing", ({ senderId }) => {
-    if (senderId !== authStore.user?._id) {
-      isTyping.value = true;
-      clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        isTyping.value = false;
-      }, 2000);
-    }
-  });
+function handleTyping({ senderId }) {
+  if (senderId === authStore.user?._id) return;
 
-  // Lịch sử chat
-  socket.on("chat_history", (history) => {
-    messages.value = history;
-    scrollToBottom();
-  });
+  isTyping.value = true;
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(() => {
+    isTyping.value = false;
+  }, 2000);
+}
+
+function handleHistory(history) {
+  messages.value = Array.isArray(history) ? history : [];
+  scrollToBottom();
+}
+
+function handleChatError() {
+  // Không hiển thị toast ở đây để tránh nhiễu UI.
+}
+
+function attachSocketListeners() {
+  if (!socket) return;
+  socket.on("connect", handleConnect);
+  socket.on("disconnect", handleDisconnect);
+  socket.on("new_message", handleNewMessage);
+  socket.on("typing", handleTyping);
+  socket.on("chat_history", handleHistory);
+  socket.on("chat_error", handleChatError);
+}
+
+function detachSocketListeners() {
+  if (!socket) return;
+  socket.off("connect", handleConnect);
+  socket.off("disconnect", handleDisconnect);
+  socket.off("new_message", handleNewMessage);
+  socket.off("typing", handleTyping);
+  socket.off("chat_history", handleHistory);
+  socket.off("chat_error", handleChatError);
 }
 
 // ─── ACTIONS ──────────────────────────────────────────────────────────────────
 function sendMessage() {
-  if (!messageInput.value.trim() || !isConnected.value) return;
+  const content = messageInput.value.trim();
+  if (!content || !isConnected.value || !socket) return;
 
-  const msg = {
-    content: messageInput.value.trim(),
-    senderId: authStore.user?._id,
-    senderName: authStore.user?.name,
-    createdAt: new Date().toISOString(),
-    id: Date.now(),
-  };
-
-  // Optimistic update
-  messages.value.push(msg);
-  socket.emit("send_message", msg);
+  socket.emit("send_message", { content });
   messageInput.value = "";
   scrollToBottom();
 }
 
 function emitTyping() {
-  socket.emit("typing", { senderId: authStore.user?._id });
+  if (!socket || !isConnected.value) return;
+  socket.emit("typing", {});
 }
 
 async function scrollToBottom() {
@@ -238,13 +251,26 @@ function formatTime(date) {
 watch(isOpen, (open) => {
   if (open) {
     unreadCount.value = 0;
+    socket?.emit("chat:load", { limit: 200 });
     scrollToBottom();
   }
 });
 
 // ─── LIFECYCLE ────────────────────────────────────────────────────────────────
-onMounted(() => initSocket());
-onUnmounted(() => socket?.disconnect());
+onMounted(() => {
+  if (!authStore.user?._id) return;
+  socket = connectSocket();
+  attachSocketListeners();
+
+  if (socket.connected) {
+    handleConnect();
+  }
+});
+
+onUnmounted(() => {
+  clearTimeout(typingTimeout);
+  detachSocketListeners();
+});
 </script>
 
 <style scoped>

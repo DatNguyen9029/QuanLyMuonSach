@@ -10,6 +10,11 @@ const chatMessageSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    receiver: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     message: {
       type: String,
       required: true,
@@ -20,7 +25,7 @@ const chatMessageSchema = new mongoose.Schema(
       default: Date.now,
     },
   },
-  { timestamps: false },
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("ChatMessage", chatMessageSchema);

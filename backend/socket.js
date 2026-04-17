@@ -17,8 +17,83 @@
 const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
 const User = require("./models/User.model");
+const ChatMessage = require("./models/ChatMessage.model");
+const notifService = require("./services/notification.service");
+const mongoose = require("mongoose");
 
 let _io = null;
+
+function normalizeMessage(message) {
+  return {
+    _id: message._id,
+    content: message.message,
+    senderId: message.sender?._id?.toString() || message.sender?.toString?.(),
+    senderName: message.sender?.hoTen || "Người dùng",
+    senderRole: message.sender?.role || null,
+    receiverId:
+      message.receiver?._id?.toString() || message.receiver?.toString?.() || null,
+    receiverName: message.receiver?.hoTen || null,
+    receiverRole: message.receiver?.role || null,
+    createdAt: message.createdAt || message.timestamp,
+    timestamp: message.timestamp || message.createdAt,
+  };
+}
+
+async function getAdminUsers() {
+  return User.find({ role: "admin" }).select("_id hoTen role").lean();
+}
+
+async function loadHistoryForSocket(socket, payload = {}) {
+  const limitRaw = Number(payload.limit || 200);
+  const limit = Math.min(Math.max(limitRaw, 1), 500);
+  const currentUser = socket.user;
+  const adminUsers = await getAdminUsers();
+  const adminIds = adminUsers.map((admin) => admin._id);
+
+  let filter = null;
+
+  if (currentUser.role === "admin") {
+    const readerId = payload.readerId;
+
+    if (!readerId || !mongoose.Types.ObjectId.isValid(readerId)) {
+      return [];
+    }
+
+    const reader = await User.findOne({
+      _id: readerId,
+      role: "user",
+    })
+      .select("_id")
+      .lean();
+
+    if (!reader) return [];
+
+    filter = {
+      $or: [
+        { sender: reader._id, receiver: { $in: adminIds } },
+        { sender: { $in: adminIds }, receiver: reader._id },
+        { sender: reader._id, receiver: null }, // Dữ liệu cũ
+      ],
+    };
+  } else {
+    filter = {
+      $or: [
+        { sender: currentUser._id, receiver: { $in: adminIds } },
+        { sender: { $in: adminIds }, receiver: currentUser._id },
+        { sender: currentUser._id, receiver: null }, // Dữ liệu cũ
+      ],
+    };
+  }
+
+  const history = await ChatMessage.find(filter)
+    .populate("sender", "hoTen avatar role")
+    .populate("receiver", "hoTen avatar role")
+    .sort({ createdAt: 1, timestamp: 1 })
+    .limit(limit)
+    .lean();
+
+  return history.map(normalizeMessage);
+}
 
 /**
  * Khởi tạo Socket.io server (gọi 1 lần duy nhất khi start app)
@@ -94,6 +169,170 @@ function initSocket(httpServer, config = {}) {
         .to(`user_${userId}`)
         .emit("notification:markedRead", notificationId);
     });
+
+    // ── Load lịch sử chat ────────────────────────────────────────────────────
+    socket.on("chat:load", async (payload = {}) => {
+      try {
+        const history = await loadHistoryForSocket(socket, payload);
+        socket.emit("chat_history", history);
+      } catch (err) {
+        socket.emit("chat_error", {
+          message: "Không thể tải lịch sử chat.",
+        });
+      }
+    });
+
+    // ── Gửi tin nhắn ─────────────────────────────────────────────────────────
+    socket.on("send_message", async (payload = {}) => {
+      try {
+        const content = String(payload.content || "").trim();
+        if (!content) return;
+
+        let receiver = null;
+
+        if (role === "admin") {
+          const receiverId = payload.receiverId;
+          if (!receiverId || !mongoose.Types.ObjectId.isValid(receiverId)) {
+            return socket.emit("chat_error", {
+              message: "Admin cần chọn độc giả trước khi gửi tin.",
+            });
+          }
+
+          receiver = await User.findOne({
+            _id: receiverId,
+            role: "user",
+          })
+            .select("_id hoTen role")
+            .lean();
+
+          if (!receiver) {
+            return socket.emit("chat_error", {
+              message: "Độc giả không tồn tại hoặc không hợp lệ.",
+            });
+          }
+        } else {
+          // User chỉ được nhắn cho admin
+          const requestedReceiverId = payload.receiverId;
+
+          if (requestedReceiverId) {
+            if (!mongoose.Types.ObjectId.isValid(requestedReceiverId)) {
+              return socket.emit("chat_error", {
+                message: "Người nhận không hợp lệ.",
+              });
+            }
+
+            receiver = await User.findOne({
+              _id: requestedReceiverId,
+              role: "admin",
+            })
+              .select("_id hoTen role")
+              .lean();
+          }
+
+          if (!receiver) {
+            receiver = await User.findOne({ role: "admin" })
+              .select("_id hoTen role")
+              .lean();
+          }
+
+          if (!receiver) {
+            return socket.emit("chat_error", {
+              message: "Hiện chưa có admin trực để nhận tin nhắn.",
+            });
+          }
+        }
+
+        const created = await ChatMessage.create({
+          sender: userId,
+          receiver: receiver._id,
+          message: content,
+          timestamp: new Date(),
+        });
+
+        await created.populate([
+          { path: "sender", select: "hoTen avatar role" },
+          { path: "receiver", select: "hoTen avatar role" },
+        ]);
+
+        const outMessage = normalizeMessage(created.toObject());
+
+        if (role === "admin") {
+          _io.to(`user_${receiver._id.toString()}`).emit("new_message", outMessage);
+          _io.to("admin").emit("new_message", outMessage);
+
+          await notifService.createAndEmit(_io, {
+            userId: receiver._id,
+            title: "Tin nhắn hỗ trợ",
+            message: `${socket.user.name}: ${content}`,
+            type: "chat_new",
+            relatedId: created._id,
+            relatedType: "chat",
+          });
+        } else {
+          _io.to("admin").emit("new_message", outMessage);
+          _io.to(`user_${userId}`).emit("new_message", outMessage);
+
+          const admins = await getAdminUsers();
+          await Promise.allSettled(
+            admins.map((admin) =>
+              notifService.createAndEmit(_io, {
+                userId: admin._id,
+                title: "Tin nhắn mới từ độc giả",
+                message: `${socket.user.name}: ${content}`,
+                type: "chat_new",
+                relatedId: created._id,
+                relatedType: "chat",
+              }),
+            ),
+          );
+        }
+      } catch (err) {
+        socket.emit("chat_error", { message: "Không thể gửi tin nhắn." });
+      }
+    });
+
+    // ── Typing indicator ─────────────────────────────────────────────────────
+    socket.on("typing", async (payload = {}) => {
+      try {
+        if (role === "admin") {
+          const receiverId = payload.receiverId;
+          if (!receiverId || !mongoose.Types.ObjectId.isValid(receiverId)) return;
+
+          const reader = await User.findOne({
+            _id: receiverId,
+            role: "user",
+          })
+            .select("_id")
+            .lean();
+
+          if (!reader) return;
+
+          _io.to(`user_${reader._id.toString()}`).emit("typing", {
+            senderId: userId,
+            senderRole: "admin",
+            receiverId: reader._id.toString(),
+          });
+
+          return;
+        }
+
+        // User chỉ emit typing cho room admin
+        _io.to("admin").emit("typing", {
+          senderId: userId,
+          senderRole: "user",
+          readerId: userId,
+        });
+      } catch (err) {
+        // Ignore typing errors silently
+      }
+    });
+
+    // User khi vào hệ thống thì tự load lịch sử với admin
+    if (role === "user") {
+      loadHistoryForSocket(socket)
+        .then((history) => socket.emit("chat_history", history))
+        .catch(() => {});
+    }
 
     socket.on("disconnect", (reason) => {
       console.log(`[Socket] User ${userId} disconnected: ${reason}`);
