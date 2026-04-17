@@ -4,7 +4,7 @@ const { hashPassword } = require("./password.util");
 async function seedAdminAccount() {
   const adminPayload = {
     username: "admin",
-    email: "admin@happylibrary.local",
+    email: "admin@123",
     hoTen: "Administrator",
     role: "admin",
     passwordHash: hashPassword("admin@123"),
