@@ -25,3 +25,7 @@ happy-library-backend/
 │ └── chat.routes.js
 └── middleware/
 └── auth.middleware.js ← protect + adminOnly
+
+Lệnh migration mã sách (chạy 1 lần):
+- `npm run migrate:book-codes`
+- Script sẽ tự gán `maSach` dạng `A001, A002, ...` cho các sách cũ chưa có mã.

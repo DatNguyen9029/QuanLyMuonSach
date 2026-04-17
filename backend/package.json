@@ -8,6 +8,7 @@
   "main": "server.js",
   "scripts": {
     "start": "nodemon server.js",
+    "migrate:book-codes": "node scripts/migrateBookCodes.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
