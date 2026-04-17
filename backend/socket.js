@@ -31,7 +31,9 @@ function normalizeMessage(message) {
     senderName: message.sender?.hoTen || "Người dùng",
     senderRole: message.sender?.role || null,
     receiverId:
-      message.receiver?._id?.toString() || message.receiver?.toString?.() || null,
+      message.receiver?._id?.toString() ||
+      message.receiver?.toString?.() ||
+      null,
     receiverName: message.receiver?.hoTen || null,
     receiverRole: message.receiver?.role || null,
     createdAt: message.createdAt || message.timestamp,
@@ -50,7 +52,7 @@ async function loadHistoryForSocket(socket, payload = {}) {
   const adminUsers = await getAdminUsers();
   const adminIds = adminUsers.map((admin) => admin._id);
 
-  let filter = null;
+  let filter;
 
   if (currentUser.role === "admin") {
     const readerId = payload.readerId;
@@ -103,7 +105,8 @@ async function loadHistoryForSocket(socket, payload = {}) {
  */
 function initSocket(httpServer, config = {}) {
   const jwtSecret = config.jwtSecret || process.env.JWT_SECRET;
-  const clientUrl = config.clientUrl || process.env.CLIENT_URL || "http://localhost:5173";
+  const clientUrl =
+    config.clientUrl || process.env.CLIENT_URL || "http://localhost:5173";
 
   _io = new Server(httpServer, {
     cors: {
@@ -175,7 +178,7 @@ function initSocket(httpServer, config = {}) {
       try {
         const history = await loadHistoryForSocket(socket, payload);
         socket.emit("chat_history", history);
-      } catch (err) {
+      } catch {
         socket.emit("chat_error", {
           message: "Không thể tải lịch sử chat.",
         });
@@ -257,7 +260,9 @@ function initSocket(httpServer, config = {}) {
         const outMessage = normalizeMessage(created.toObject());
 
         if (role === "admin") {
-          _io.to(`user_${receiver._id.toString()}`).emit("new_message", outMessage);
+          _io
+            .to(`user_${receiver._id.toString()}`)
+            .emit("new_message", outMessage);
           _io.to("admin").emit("new_message", outMessage);
 
           await notifService.createAndEmit(_io, {
@@ -286,7 +291,7 @@ function initSocket(httpServer, config = {}) {
             ),
           );
         }
-      } catch (err) {
+      } catch {
         socket.emit("chat_error", { message: "Không thể gửi tin nhắn." });
       }
     });
@@ -296,7 +301,8 @@ function initSocket(httpServer, config = {}) {
       try {
         if (role === "admin") {
           const receiverId = payload.receiverId;
-          if (!receiverId || !mongoose.Types.ObjectId.isValid(receiverId)) return;
+          if (!receiverId || !mongoose.Types.ObjectId.isValid(receiverId))
+            return;
 
           const reader = await User.findOne({
             _id: receiverId,
@@ -322,7 +328,7 @@ function initSocket(httpServer, config = {}) {
           senderRole: "user",
           readerId: userId,
         });
-      } catch (err) {
+      } catch {
         // Ignore typing errors silently
       }
     });
