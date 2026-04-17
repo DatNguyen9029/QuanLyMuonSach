@@ -78,6 +78,8 @@ function initSocket(httpServer, config = {}) {
     if (role === "admin") {
       // Admin vào room 'admin' ĐỂ nhận mọi thông báo từ user
       socket.join("admin");
+      // Đồng thời vào room user riêng để nhận notification theo userId lưu trong DB
+      socket.join(`user_${userId}`);
       console.log(`[Socket] Admin ${userId} joined room: admin`);
     } else {
       // User thường vào room riêng của họ

@@ -41,5 +41,6 @@ router.get(
 
 // Lấy thông tin user đang đăng nhập
 router.get("/me", protect, authCtrl.getMe);
+router.patch("/change-password", protect, authCtrl.changePassword);
 
 module.exports = router;

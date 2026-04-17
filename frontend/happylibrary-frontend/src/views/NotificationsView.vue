@@ -146,23 +146,6 @@
           class="notification-card group p-6 rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all mb-4 last:mb-0 bg-white"
         >
           <div class="flex items-start gap-4">
-            <!-- Icon -->
-            <div class="flex-shrink-0">
-              <div
-                class="w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg"
-                :class="getTypeClass(notification.type)"
-              >
-                <svg
-                  class="w-7 h-7"
-                  :class="getIconColor(notification.type)"
-                  fill="currentColor"
-                >
-                  <!-- Icons as in dropdown -->
-                </svg>
-              </div>
-            </div>
-
-            <!-- Content -->
             <div class="flex-1">
               <div class="flex items-start justify-between mb-2">
                 <h3 class="font-bold text-slate-900 text-lg leading-tight">
@@ -306,30 +289,6 @@ async function markAllAsRead() {
 
 async function markAsRead(id) {
   await notificationStore.markAsRead(id);
-}
-
-function getTypeClass(type) {
-  const classes = {
-    info: "bg-blue-100",
-    success: "bg-green-100",
-    warning: "bg-yellow-100",
-    error: "bg-red-100",
-    borrow_update: "bg-indigo-100",
-    chat_new: "bg-purple-100",
-  };
-  return classes[type] || "bg-slate-100";
-}
-
-function getIconColor(type) {
-  const colors = {
-    info: "text-blue-600",
-    success: "text-green-600",
-    warning: "text-yellow-600",
-    error: "text-red-600",
-    borrow_update: "text-indigo-600",
-    chat_new: "text-purple-600",
-  };
-  return colors[type] || "text-slate-600";
 }
 
 function formatTime(dateStr) {

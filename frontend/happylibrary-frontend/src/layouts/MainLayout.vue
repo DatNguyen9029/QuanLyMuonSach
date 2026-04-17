@@ -314,6 +314,7 @@
 
     <!-- Chat Widget (floating) -->
     <ChatWidget v-if="authStore.isLoggedIn" />
+    <NotificationToast v-if="authStore.isLoggedIn" />
   </div>
 </template>
 
@@ -323,7 +324,9 @@ import { useRouter, useRoute } from "vue-router";
 import { useAuthStore } from "@/stores/auth.store";
 import { useBorrowStore } from "@/stores/borrow.store";
 import { useNotificationStore } from "@/stores/notification.store";
+import { connectSocket, disconnectSocket } from "@/services/socket";
 import ChatWidget from "@/components/chat/ChatWidget.vue";
+import NotificationToast from "@/components/common/NotificationToast.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -424,14 +427,23 @@ function handleOutsideClick(e) {
 
 onMounted(() => {
   document.addEventListener("click", handleOutsideClick);
-  notificationStore.fetchUnreadCount().catch(() => {});
+
+  if (authStore.isLoggedIn) {
+    const socket = connectSocket();
+    notificationStore.init(socket).catch(() => {});
+  }
+
   if (authStore.isAdmin) {
     borrowStore.fetchPendingCount().catch(() => {});
   } else {
     borrowStore.pendingCount = 0;
   }
 });
-onUnmounted(() => document.removeEventListener("click", handleOutsideClick));
+onUnmounted(() => {
+  document.removeEventListener("click", handleOutsideClick);
+  notificationStore.detachSocketListeners();
+  disconnectSocket();
+});
 </script>
 
 <style scoped>

@@ -177,8 +177,10 @@
 import { ref, computed, watch } from "vue";
 import { useNotificationStore } from "@/stores/notification.store";
 import { useRouter } from "vue-router";
+import { useAuthStore } from "@/stores/auth.store";
 
 const notifStore = useNotificationStore();
+const authStore = useAuthStore();
 const router = useRouter();
 
 const isOpen = ref(false);
@@ -222,10 +224,17 @@ async function handleItemClick(notif) {
 
   // Navigate đến trang liên quan
   if (notif.relatedType === "borrow" && notif.relatedId) {
-    router.push(`/borrows/${notif.relatedId}`);
+    if (authStore.isAdmin) {
+      router.push({ path: "/borrows", query: { highlight: notif.relatedId } });
+    } else {
+      router.push({
+        path: "/dashboard",
+        query: { source: "notification", relatedBorrow: notif.relatedId },
+      });
+    }
     closeDropdown();
   } else if (notif.relatedType === "chat" && notif.relatedId) {
-    router.push(`/chat/${notif.relatedId}`);
+    router.push("/chat");
     closeDropdown();
   }
 }

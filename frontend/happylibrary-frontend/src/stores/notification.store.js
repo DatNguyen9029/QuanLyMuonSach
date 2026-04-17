@@ -1,69 +1,54 @@
-/**
- * Notification Store - Happy Library (Pinia)
- * ─────────────────────────────────────────────
- * Quản lý toàn bộ trạng thái notification phía frontend:
- *   - Fetch danh sách từ REST API
- *   - Lắng nghe sự kiện real-time từ Socket.io
- *   - Đánh dấu đọc (đơn lẻ và tất cả)
- *
- * CÁCH DÙNG:
- *   import { useNotificationStore } from '@/stores/notification.store';
- *   const notifStore = useNotificationStore();
- *   notifStore.init(socket); // Gọi 1 lần sau khi socket kết nối
- */
-
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import axios from "axios";
-
-// Tạo axios instance với base URL
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// Thêm token vào mỗi request
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+import api from "@/services/api";
 
 export const useNotificationStore = defineStore("notification", () => {
-  // ── State ────────────────────────────────────────────────────────────────
-  const notifications = ref([]); // Danh sách thông báo
-  const unreadCount = ref(0); // Badge counter
+  const notifications = ref([]);
+  const unreadCount = ref(0);
   const isLoading = ref(false);
   const pagination = ref({ page: 1, limit: 10, total: 0, totalPages: 1 });
+  const toastQueue = ref([]);
 
-  // Toast queue: các notification popup ngắn hạn (xuất hiện rồi tự ẩn)
-  const toastQueue = ref([]); // [{ id, title, message, type, createdAt }]
+  const socketRef = ref(null);
 
-  // ── Getters ──────────────────────────────────────────────────────────────
   const hasUnread = computed(() => unreadCount.value > 0);
   const unreadList = computed(() => notifications.value.filter((n) => !n.read));
 
-  // ── Actions ──────────────────────────────────────────────────────────────
-
-  /**
-   * Khởi tạo store: fetch dữ liệu ban đầu + lắng nghe socket.
-   * Gọi sau khi socket đã kết nối thành công.
-   * @param {import('socket.io-client').Socket} socket
-   */
-  function init(socket) {
-    fetchNotifications();
-    fetchUnreadCount();
-    listenSocket(socket);
+  function normalizeNotification(notif = {}) {
+    return {
+      _id: notif._id,
+      title: notif.title || "Thông báo",
+      message: notif.message || "",
+      type: notif.type || "info",
+      relatedId: notif.relatedId || null,
+      relatedType: notif.relatedType || null,
+      data: notif.data || {},
+      read: Boolean(notif.read),
+      createdAt: notif.createdAt || new Date().toISOString(),
+    };
   }
 
-  /**
-   * Fetch danh sách thông báo (phân trang).
-   * @param {{ page?: number, read?: boolean|null }} options
-   */
+  function resetPaginationFromResponse(rawPagination = {}) {
+    pagination.value = {
+      page: Number(rawPagination.page || 1),
+      limit: Number(rawPagination.limit || pagination.value.limit || 10),
+      total: Number(rawPagination.total || 0),
+      totalPages: Number(rawPagination.totalPages || 1),
+    };
+  }
+
+  function upsertNotification(incoming) {
+    const notif = normalizeNotification(incoming);
+    const index = notifications.value.findIndex((n) => n._id === notif._id);
+
+    if (index >= 0) {
+      notifications.value[index] = { ...notifications.value[index], ...notif };
+      return;
+    }
+
+    notifications.value.unshift(notif);
+  }
+
   async function fetchNotifications({ page = 1, read = null } = {}) {
     isLoading.value = true;
     try {
@@ -71,92 +56,86 @@ export const useNotificationStore = defineStore("notification", () => {
       if (read !== null) params.read = read;
 
       const { data } = await api.get("/notifications", { params });
+      const list = Array.isArray(data?.data) ? data.data.map(normalizeNotification) : [];
 
       if (page === 1) {
-        notifications.value = data.data; // Reset khi load trang đầu
+        notifications.value = list;
       } else {
-        notifications.value.push(...data.data); // Append khi load more
+        const seen = new Set(notifications.value.map((n) => n._id));
+        notifications.value.push(...list.filter((n) => !seen.has(n._id)));
       }
 
-      pagination.value = data.pagination;
-      unreadCount.value = data.stats.unreadCount;
+      resetPaginationFromResponse(data?.pagination || {});
+      unreadCount.value = Number(data?.stats?.unreadCount || 0);
     } catch (err) {
-      console.error("[NotificationStore] Lỗi khi fetch:", err);
+      console.error("[NotificationStore] Fetch notifications error:", err);
+      throw err;
     } finally {
       isLoading.value = false;
     }
   }
 
-  /**
-   * Chỉ fetch unread count (dùng cho badge, không cần load danh sách đầy đủ).
-   */
   async function fetchUnreadCount() {
     try {
       const { data } = await api.get("/notifications/unread-count");
-      unreadCount.value = data.data.unreadCount;
+      unreadCount.value = Number(data?.data?.unreadCount || 0);
+      return unreadCount.value;
     } catch (err) {
-      console.error("[NotificationStore] Lỗi khi fetch unread count:", err);
+      console.error("[NotificationStore] Fetch unread count error:", err);
+      throw err;
     }
   }
 
-  /**
-   * Đánh dấu đọc 1 thông báo.
-   * @param {string} id - Notification ID
-   */
   async function markAsRead(id) {
     try {
       await api.patch(`/notifications/${id}/read`);
 
-      // Cập nhật local state ngay (optimistic update)
       const notif = notifications.value.find((n) => n._id === id);
       if (notif && !notif.read) {
         notif.read = true;
         unreadCount.value = Math.max(0, unreadCount.value - 1);
       }
+
+      if (socketRef.value?.connected) {
+        socketRef.value.emit("notification:markRead", id);
+      }
     } catch (err) {
-      console.error("[NotificationStore] Lỗi khi mark as read:", err);
+      console.error("[NotificationStore] Mark as read error:", err);
+      throw err;
     }
   }
 
-  /**
-   * Đánh dấu đọc tất cả thông báo.
-   */
   async function markAllAsRead() {
     try {
       await api.patch("/notifications/read-all");
-
-      // Cập nhật local state
-      notifications.value.forEach((n) => (n.read = true));
+      notifications.value = notifications.value.map((n) => ({ ...n, read: true }));
       unreadCount.value = 0;
     } catch (err) {
-      console.error("[NotificationStore] Lỗi khi mark all as read:", err);
+      console.error("[NotificationStore] Mark all as read error:", err);
+      throw err;
     }
   }
 
-  /**
-   * Lắng nghe sự kiện 'notification:new' từ Socket.io.
-   * Khi có thông báo mới:
-   *   1. Chèn vào đầu danh sách (newest first)
-   *   2. Tăng unreadCount
-   *   3. Đẩy vào toastQueue để hiển thị popup
-   * @param {import('socket.io-client').Socket} socket
-   */
   function listenSocket(socket) {
     if (!socket) return;
 
-    socket.on("notification:new", (notif) => {
-      // Tránh duplicate nếu server emit 2 lần
-      const exists = notifications.value.some((n) => n._id === notif._id);
-      if (!exists) {
-        notifications.value.unshift({ ...notif, read: false });
-        unreadCount.value += 1;
+    if (socketRef.value === socket) return;
+
+    detachSocketListeners();
+    socketRef.value = socket;
+
+    socket.on("notification:new", (incoming) => {
+      const beforeUnread = unreadCount.value;
+      upsertNotification({ ...incoming, read: Boolean(incoming?.read) });
+
+      const wasRead = Boolean(incoming?.read);
+      if (!wasRead) {
+        unreadCount.value = beforeUnread + 1;
       }
 
-      // Luôn hiển thị toast (kể cả nếu đã có trong list)
-      pushToast(notif);
+      pushToast(incoming);
     });
 
-    // Sync trạng thái đã đọc giữa nhiều tab của cùng 1 user
     socket.on("notification:markedRead", (notifId) => {
       const notif = notifications.value.find((n) => n._id === notifId);
       if (notif && !notif.read) {
@@ -166,59 +145,57 @@ export const useNotificationStore = defineStore("notification", () => {
     });
   }
 
-  /**
-   * Thêm notification vào toast queue, tự động xóa sau timeout.
-   * @param {Object} notif
-   * @param {number} [duration=5000] ms trước khi toast tự ẩn
-   */
-  function pushToast(notif, duration = 5000) {
-    const toastId = notif._id || Date.now().toString();
-
-    // Tránh duplicate toast
-    if (toastQueue.value.some((t) => t.id === toastId)) return;
-
-    toastQueue.value.push({ ...notif, id: toastId });
-
-    setTimeout(() => {
-      removeToast(toastId);
-    }, duration);
+  function detachSocketListeners() {
+    if (!socketRef.value) return;
+    socketRef.value.off("notification:new");
+    socketRef.value.off("notification:markedRead");
+    socketRef.value = null;
   }
 
-  /**
-   * Xóa toast khỏi queue (gọi khi user đóng toast thủ công).
-   * @param {string} toastId
-   */
+  function init(socket) {
+    if (socket) {
+      listenSocket(socket);
+    }
+    return Promise.allSettled([fetchNotifications(), fetchUnreadCount()]);
+  }
+
+  function pushToast(notif, duration = 5000) {
+    const normalized = normalizeNotification(notif);
+    const toastId = normalized._id || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    if (toastQueue.value.some((t) => t.id === toastId)) return;
+
+    toastQueue.value.push({ ...normalized, id: toastId });
+    setTimeout(() => removeToast(toastId), duration);
+  }
+
   function removeToast(toastId) {
     toastQueue.value = toastQueue.value.filter((t) => t.id !== toastId);
   }
 
-  /**
-   * Reset store (dùng khi user logout).
-   */
   function reset() {
     notifications.value = [];
     unreadCount.value = 0;
     toastQueue.value = [];
     pagination.value = { page: 1, limit: 10, total: 0, totalPages: 1 };
+    detachSocketListeners();
   }
 
   return {
-    // State
     notifications,
     unreadCount,
     isLoading,
     pagination,
     toastQueue,
-    // Getters
     hasUnread,
     unreadList,
-    // Actions
     init,
     fetchNotifications,
     fetchUnreadCount,
     markAsRead,
     markAllAsRead,
     listenSocket,
+    detachSocketListeners,
     pushToast,
     removeToast,
     reset,

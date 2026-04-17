@@ -11,8 +11,9 @@ const app = express();
 
 // ─── Middleware ───────────────────────────────────────────────────────────
 app.use(cors({ origin: config.app.clientUrl })); // Dùng cấu hình chuẩn của bạn
-app.use(express.json());
-app.use(express.urlencoded({ extended: true })); //
+// Tăng giới hạn body để nhận ảnh base64 từ form sách.
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" })); //
 app.use(passport.initialize());
 
 // ─── Import Routes ───────────────────────────────────────────────────────────

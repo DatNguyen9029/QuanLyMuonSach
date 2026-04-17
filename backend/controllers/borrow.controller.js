@@ -157,25 +157,32 @@ exports.createBorrowRequest = async (req, res) => {
 
     await record.populate(BORROW_POPULATE);
 
-    // ─── THÊM: Notify Admin ─────────────────────────────────────────────
+    // ─── Notify Admin: lưu DB + emit realtime ──────────────────────────
     try {
       const io = getIO();
-      io.to("admin").emit("notification:new", {
-        title: "Yêu cầu mượn sách mới",
-        message: `Người dùng ${req.user.hoTen || "không xác định"} vừa tạo yêu cầu mượn sách "${book.tenSach}".`,
-        type: "borrow_update",
-        relatedId: record._id,
-        relatedType: "borrow",
-        data: {
-          userId: req.user._id,
-          borrowId: record._id,
-          bookTitle: book.tenSach,
-          userName: req.user.hoTen,
-          trangThai: BORROW_STATUS.PENDING,
-        },
-        read: false,
-        createdAt: new Date(),
-      });
+      const admins = await User.find({ role: "admin" }).select("_id");
+      const title = "Yêu cầu mượn sách mới";
+      const message = `Người dùng ${req.user.hoTen || "không xác định"} vừa tạo yêu cầu mượn sách "${book.tenSach}".`;
+
+      await Promise.all(
+        admins.map((admin) =>
+          notifService.createAndEmit(io, {
+            userId: admin._id,
+            title,
+            message,
+            type: "borrow_update",
+            relatedId: record._id,
+            relatedType: "borrow",
+            data: {
+              userId: req.user._id,
+              borrowId: record._id,
+              bookTitle: book.tenSach,
+              userName: req.user.hoTen,
+              trangThai: BORROW_STATUS.PENDING,
+            },
+          }),
+        ),
+      );
     } catch (err) {
       console.error("[Notification] Lỗi emit admin:", err);
     }

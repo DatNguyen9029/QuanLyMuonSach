@@ -3,13 +3,11 @@
     <!-- Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-bold text-gray-900">Quản lý Sách</h1>
+        <h1 class="text-3xl font-bold text-gray-900">
+          {{ pageTitle }}
+        </h1>
         <p class="text-gray-600">
-          {{
-            authStore.isAdmin
-              ? "Quản lý danh sách sách trong thư viện"
-              : "Xem danh sách sách hiện có trong thư viện"
-          }}
+          {{ pageDescription }}
         </p>
       </div>
       <div class="flex gap-2">
@@ -98,9 +96,7 @@
               <li>Nhấn vào nút "Tạo phiếu mượn" bên cạnh sách bạn muốn mượn</li>
               <li>Chọn ngày hẹn trả (tối đa 30 ngày)</li>
               <li>Gửi yêu cầu và chờ admin duyệt</li>
-              <li>
-                Bạn sẽ nhận thông báo khi yêu cầu được duyệt hoặc từ chối
-              </li>
+              <li>Bạn sẽ nhận thông báo khi yêu cầu được duyệt hoặc từ chối</li>
             </ol>
           </div>
         </div>
@@ -141,6 +137,11 @@
               <th
                 class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
               >
+                Ảnh bìa
+              </th>
+              <th
+                class="px-4 py-3 text-left text-sm font-semibold text-gray-600"
+              >
                 Tên sách
               </th>
               <th
@@ -172,6 +173,20 @@
               class="border-b border-gray-200 hover:bg-gray-50"
             >
               <td class="px-4 py-3 text-sm text-gray-700">{{ book._id }}</td>
+              <td class="px-4 py-3">
+                <div class="book-cover">
+                  <img
+                    v-if="book.hinhAnh && !brokenImageIds.has(book._id)"
+                    :src="book.hinhAnh"
+                    :alt="`Ảnh bìa sách ${book.tenSach}`"
+                    class="book-cover__image"
+                    @error="handleImageError(book._id)"
+                  />
+                  <div v-else class="book-cover__placeholder">
+                    {{ getBookInitial(book.tenSach) }}
+                  </div>
+                </div>
+              </td>
               <td class="px-4 py-3 text-sm font-medium text-gray-900">
                 {{ book.tenSach }}
               </td>
@@ -281,6 +296,14 @@ const editingBook = ref(null);
 const showBorrowModal = ref(false);
 const showBorrowHelp = ref(false);
 const selectedBook = ref(null);
+const brokenImageIds = ref(new Set());
+
+const pageTitle = computed(() => (authStore.isAdmin ? "Quản lý Sách" : "Sách"));
+const pageDescription = computed(() =>
+  authStore.isAdmin
+    ? "Quản lý danh sách sách trong thư viện"
+    : "Xem danh sách sách hiện có trong thư viện",
+);
 
 const books = computed(() => {
   let result = bookStore.books;
@@ -341,6 +364,11 @@ const saveBook = async (bookData) => {
     closeModal();
   } catch (error) {
     console.error("Failed to save book:", error);
+    const errorMessage =
+      error.response?.data?.message ||
+      error.message ||
+      "Không thể lưu sách. Vui lòng thử lại.";
+    alert(errorMessage);
   }
 };
 
@@ -372,14 +400,18 @@ const handleBorrowSubmit = async (borrowData) => {
 
     // Show success message
     alert(
-      "Yêu cầu mượn sách đã được gửi thành công! Vui lòng chờ admin duyệt."
+      "Yêu cầu mượn sách đã được gửi thành công! Vui lòng chờ admin duyệt.",
     );
 
     // Close modal
     closeBorrowModal();
 
-    // Navigate to borrows page to see the request
-    router.push("/borrows");
+    // Reader không có quyền vào /borrows (admin-only), chuyển về dashboard
+    if (authStore.isAdmin) {
+      router.push("/borrows");
+    } else {
+      router.push("/dashboard");
+    }
   } catch (error) {
     console.error("Failed to create borrow request:", error);
     const errorMessage =
@@ -389,10 +421,45 @@ const handleBorrowSubmit = async (borrowData) => {
     alert(errorMessage);
   }
 };
+
+const getBookInitial = (title = "") => {
+  return title.trim().charAt(0).toUpperCase() || "?";
+};
+
+const handleImageError = (bookId) => {
+  brokenImageIds.value = new Set([...brokenImageIds.value, bookId]);
+};
 </script>
 
 <style scoped>
-/* Component-specific styles */
-</style>
+.book-cover {
+  width: 3.5rem;
+  height: 5rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 
-export default { name: "Books" }
+.book-cover__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.book-cover__placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e5e7eb, #f9fafb);
+  color: #4b5563;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+</style>

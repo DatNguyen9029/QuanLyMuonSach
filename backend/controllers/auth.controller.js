@@ -135,3 +135,72 @@ exports.googleCallback = (req, res) => {
 exports.getMe = (req, res) => {
   res.json({ success: true, data: req.user });
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /api/auth/change-password - Đổi mật khẩu cho user đã đăng nhập
+// ─────────────────────────────────────────────────────────────────────────────
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Vui lòng nhập đầy đủ mật khẩu hiện tại, mật khẩu mới và xác nhận.",
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu mới phải có ít nhất 6 ký tự.",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Xác nhận mật khẩu mới không khớp.",
+      });
+    }
+
+    const user = await User.findById(req.user._id).select("+passwordHash");
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Tài khoản không tồn tại." });
+    }
+
+    // Tài khoản OAuth có thể chưa có mật khẩu local
+    if (!user.passwordHash) {
+      return res.status(400).json({
+        success: false,
+        message: "Tài khoản này chưa có mật khẩu cục bộ để thay đổi.",
+      });
+    }
+
+    if (!verifyPassword(currentPassword, user.passwordHash)) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu hiện tại không đúng.",
+      });
+    }
+
+    if (verifyPassword(newPassword, user.passwordHash)) {
+      return res.status(400).json({
+        success: false,
+        message: "Mật khẩu mới không được trùng với mật khẩu hiện tại.",
+      });
+    }
+
+    user.passwordHash = hashPassword(newPassword);
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: "Đổi mật khẩu thành công.",
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};

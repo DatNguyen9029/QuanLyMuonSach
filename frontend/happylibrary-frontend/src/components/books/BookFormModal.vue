@@ -81,11 +81,30 @@
 
       <div>
         <label class="form-label">Ảnh bìa</label>
+        <div class="space-y-3">
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept="image/*"
+            class="form-control"
+            @change="handleImageFileChange"
+          />
+          <p class="text-xs text-gray-500">
+            Chọn ảnh từ thiết bị (tối đa 5MB), hoặc nhập URL bên dưới.
+          </p>
+          <div v-if="form.hinhAnh" class="cover-preview-wrapper">
+            <img :src="form.hinhAnh" alt="Xem trước ảnh bìa" class="cover-preview" />
+            <button type="button" class="btn btn-secondary text-xs" @click="clearImage">
+              Xóa ảnh
+            </button>
+          </div>
+        </div>
         <input
-          v-model="form.hinhAnh"
+          v-model="imageUrlInput"
           type="text"
           class="form-control"
           placeholder="https://example.com/book-cover.jpg"
+          @input="handleImageUrlInput"
         />
       </div>
     </div>
@@ -103,6 +122,8 @@ const props = defineProps({
 
 const emit = defineEmits(["close", "save"]);
 const publishers = ref([]);
+const fileInputRef = ref(null);
+const imageUrlInput = ref("");
 
 const form = ref({
   tenSach: "",
@@ -132,6 +153,11 @@ onMounted(async () => {
       soLuongTienTai: props.book.soLuongTienTai || 0,
       hinhAnh: props.book.hinhAnh || "",
     };
+
+    // Nếu ảnh đang là URL thì hiển thị trong ô nhập URL; base64 thì chỉ preview.
+    imageUrlInput.value = String(props.book.hinhAnh || "").startsWith("data:")
+      ? ""
+      : props.book.hinhAnh || "";
   }
 });
 
@@ -141,6 +167,52 @@ const handleSave = () => {
     return;
   }
   emit("save", form.value);
+};
+
+const handleImageFileChange = (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    alert("Vui lòng chọn file ảnh hợp lệ.");
+    clearSelectedFile();
+    return;
+  }
+
+  const maxSize = 5 * 1024 * 1024;
+  if (file.size > maxSize) {
+    alert("Ảnh vượt quá 5MB. Vui lòng chọn ảnh nhỏ hơn.");
+    clearSelectedFile();
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    form.value.hinhAnh = typeof reader.result === "string" ? reader.result : "";
+    imageUrlInput.value = "";
+  };
+  reader.onerror = () => {
+    alert("Không thể đọc file ảnh. Vui lòng thử lại.");
+    clearSelectedFile();
+  };
+  reader.readAsDataURL(file);
+};
+
+const handleImageUrlInput = () => {
+  form.value.hinhAnh = imageUrlInput.value.trim();
+  clearSelectedFile();
+};
+
+const clearSelectedFile = () => {
+  if (fileInputRef.value) {
+    fileInputRef.value.value = "";
+  }
+};
+
+const clearImage = () => {
+  form.value.hinhAnh = "";
+  imageUrlInput.value = "";
+  clearSelectedFile();
 };
 </script>
 
@@ -154,5 +226,20 @@ const handleSave = () => {
   font-size: 0.875rem;
   font-weight: 600;
   pointer-events: none;
+}
+
+.cover-preview-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cover-preview {
+  width: 64px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
 }
 </style>

@@ -87,7 +87,7 @@
                   </span>
                 </td>
                 <td>
-                  <button class="text-sky-700 hover:underline font-semibold" @click="selectBorrow(item)">
+                  <button class="text-sky-700 hover:underline font-semibold" @click="handleViewDetail(item)">
                     Xem chi tiết
                   </button>
                 </td>
@@ -136,39 +136,47 @@
         </div>
       </section>
 
-      <section v-if="selectedBorrow" class="panel-card">
-        <div class="panel-header">
-          <h3>Chi tiết mượn sách</h3>
-          <button class="text-gray-500 hover:text-gray-700" @click="selectedBorrow = null">Đóng</button>
-        </div>
+      <Teleport to="body">
+        <div
+          v-if="showDetailModal && selectedBorrow"
+          class="detail-modal-backdrop"
+          @click.self="closeDetailModal"
+        >
+          <div class="detail-modal">
+            <div class="panel-header">
+              <h3>Chi tiết mượn sách</h3>
+              <button class="text-gray-500 hover:text-gray-700" @click="closeDetailModal">Đóng</button>
+            </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 text-sm text-gray-700">
-          <div>
-            <p class="detail-label">Tên sách</p>
-            <p class="detail-value">{{ selectedBorrow.book?.title || "—" }}</p>
-          </div>
-          <div>
-            <p class="detail-label">Độc giả</p>
-            <p class="detail-value">{{ selectedBorrow.reader?.name || displayName }}</p>
-          </div>
-          <div>
-            <p class="detail-label">Ngày mượn</p>
-            <p class="detail-value">{{ formatDate(selectedBorrow.borrowDate) }}</p>
-          </div>
-          <div>
-            <p class="detail-label">Hạn trả</p>
-            <p class="detail-value">{{ formatDate(selectedBorrow.dueDate) }}</p>
-          </div>
-          <div>
-            <p class="detail-label">Trạng thái</p>
-            <p class="detail-value">{{ getBorrowStatusLabel(selectedBorrow) }}</p>
-          </div>
-          <div>
-            <p class="detail-label">Mã yêu cầu</p>
-            <p class="detail-value">{{ selectedBorrow.id || "—" }}</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 text-sm text-gray-700">
+              <div>
+                <p class="detail-label">Tên sách</p>
+                <p class="detail-value">{{ selectedBorrow.book?.title || "—" }}</p>
+              </div>
+              <div>
+                <p class="detail-label">Độc giả</p>
+                <p class="detail-value">{{ selectedBorrow.reader?.name || displayName }}</p>
+              </div>
+              <div>
+                <p class="detail-label">Ngày mượn</p>
+                <p class="detail-value">{{ formatDate(selectedBorrow.borrowDate) }}</p>
+              </div>
+              <div>
+                <p class="detail-label">Hạn trả</p>
+                <p class="detail-value">{{ formatDate(selectedBorrow.dueDate) }}</p>
+              </div>
+              <div>
+                <p class="detail-label">Trạng thái</p>
+                <p class="detail-value">{{ getBorrowStatusLabel(selectedBorrow) }}</p>
+              </div>
+              <div>
+                <p class="detail-label">Mã yêu cầu</p>
+                <p class="detail-value">{{ selectedBorrow.id || "—" }}</p>
+              </div>
+            </div>
           </div>
         </div>
-      </section>
+      </Teleport>
 
       <button v-if="!isAdmin" class="fab-mobile" @click="goToBorrowRequest">➕</button>
     </template>
@@ -189,6 +197,7 @@ const isLoading = ref(false);
 const loadError = ref("");
 const activeBorrowFilter = ref("all");
 const selectedBorrow = ref(null);
+const showDetailModal = ref(false);
 
 const isAdmin = computed(() => authStore.isAdmin);
 const roleLabel = computed(() => (isAdmin.value ? "Admin" : "Độc giả"));
@@ -391,6 +400,20 @@ function goToBorrowRequest() {
 
 function selectBorrow(item) {
   selectedBorrow.value = item;
+  showDetailModal.value = true;
+}
+
+function closeDetailModal() {
+  showDetailModal.value = false;
+  selectedBorrow.value = null;
+}
+
+function handleViewDetail(item) {
+  if (isAdmin.value) {
+    router.push({ path: "/borrows", query: { highlight: item.id } });
+    return;
+  }
+  selectBorrow(item);
 }
 
 async function loadDashboardData() {
@@ -710,6 +733,26 @@ onMounted(loadDashboardData);
   margin-top: 0.2rem;
   color: #0f172a;
   font-weight: 600;
+}
+
+.detail-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 70;
+  padding: 1rem;
+}
+
+.detail-modal {
+  width: min(760px, 100%);
+  background: #fff;
+  border-radius: 1rem;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.25);
 }
 
 .fab-mobile {
