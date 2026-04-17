@@ -13,6 +13,7 @@ export const useBookStore = defineStore("book", () => {
 
   const normalizeBook = (book) => ({
     _id: book._id,
+    maSach: book.maSach || "",
     tenSach: book.tenSach || "",
     tacGia: book.tacGia || "",
     maNXB: book.nxb?.maNXB || "",

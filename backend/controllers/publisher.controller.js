@@ -170,15 +170,15 @@ exports.create = async (req, res) => {
       });
     }
 
-    const maNXB = normalized.maNXB || (await generateNextPublisherCode());
+    const maNXB = await generateNextPublisherCode();
 
     const duplicated = await Publisher.findOne({
-      $or: [{ maNXB }, { tenNXB: normalized.tenNXB }],
+      tenNXB: normalized.tenNXB,
     });
     if (duplicated) {
       return res.status(409).json({
         success: false,
-        message: "Mã NXB hoặc tên NXB đã tồn tại.",
+        message: "Tên NXB đã tồn tại.",
       });
     }
 
@@ -192,21 +192,10 @@ exports.create = async (req, res) => {
 exports.update = async (req, res) => {
   try {
     const normalized = normalizePublisherPayload(req.body);
-    if (!normalized.tenNXB || !normalized.maNXB) {
+    if (!normalized.tenNXB) {
       return res.status(400).json({
         success: false,
-        message: "Mã NXB và tên NXB là bắt buộc.",
-      });
-    }
-
-    const duplicated = await Publisher.findOne({
-      _id: { $ne: req.params.id },
-      $or: [{ maNXB: normalized.maNXB }, { tenNXB: normalized.tenNXB }],
-    });
-    if (duplicated) {
-      return res.status(409).json({
-        success: false,
-        message: "Mã NXB hoặc tên NXB đã tồn tại.",
+        message: "Tên NXB là bắt buộc.",
       });
     }
 
@@ -217,7 +206,24 @@ exports.update = async (req, res) => {
         .json({ success: false, message: "NXB không tồn tại." });
     }
 
-    const pub = await Publisher.findByIdAndUpdate(req.params.id, normalized, {
+    const duplicated = await Publisher.findOne({
+      _id: { $ne: req.params.id },
+      tenNXB: normalized.tenNXB,
+    });
+    if (duplicated) {
+      return res.status(409).json({
+        success: false,
+        message: "Tên NXB đã tồn tại.",
+      });
+    }
+
+    const payload = {
+      ...normalized,
+      // Mã NXB là mã hệ thống, không cho phép thay đổi khi cập nhật.
+      maNXB: currentPublisher.maNXB,
+    };
+
+    const pub = await Publisher.findByIdAndUpdate(req.params.id, payload, {
       new: true,
       runValidators: true,
     });

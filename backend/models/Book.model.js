@@ -9,6 +9,13 @@ const mongoose = require("mongoose");
  */
 const bookSchema = new mongoose.Schema(
   {
+    maSach: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      unique: true,
+      sparse: true,
+    },
     tenSach: {
       type: String,
       required: true,

@@ -172,7 +172,9 @@
               :key="book._id"
               class="border-b border-gray-200 hover:bg-gray-50"
             >
-              <td class="px-4 py-3 text-sm text-gray-700">{{ book._id }}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">
+                {{ book.maSach || "—" }}
+              </td>
               <td class="px-4 py-3">
                 <div class="book-cover">
                   <img

@@ -147,10 +147,10 @@
               <div>
                 <label class="form-label">Mã NXB</label>
                 <input
-                  v-model="form.maNXB"
-                  class="form-control uppercase"
+                  :value="form.maNXB || 'Tự động tạo'"
+                  class="form-control uppercase bg-gray-100"
                   type="text"
-                  placeholder="NXB001"
+                  readonly
                 />
               </div>
               <div>
@@ -257,10 +257,16 @@ async function savePublisher() {
     if (editingPublisher.value?._id) {
       await publisherStore.updatePublisher(
         editingPublisher.value._id,
-        form.value,
+        {
+          tenNXB: form.value.tenNXB,
+          diaChi: form.value.diaChi,
+        },
       );
     } else {
-      await publisherStore.createPublisher(form.value);
+      await publisherStore.createPublisher({
+        tenNXB: form.value.tenNXB,
+        diaChi: form.value.diaChi,
+      });
     }
     await publisherStore.fetchPublishers();
     closeModal();

@@ -6,6 +6,21 @@
 const Book = require("../models/Book.model");
 const Publisher = require("../models/Publisher.model");
 const { generateNextPublisherCode } = require("../utils/publisher.util");
+const { generateNextBookCode } = require("../utils/book.util");
+
+async function ensureBookCodes() {
+  const booksWithoutCode = await Book.find({
+    $or: [{ maSach: { $exists: false } }, { maSach: "" }, { maSach: null }],
+  })
+    .select("_id")
+    .sort({ createdAt: 1, _id: 1 })
+    .lean();
+
+  for (const book of booksWithoutCode) {
+    const maSach = await generateNextBookCode();
+    await Book.findByIdAndUpdate(book._id, { maSach });
+  }
+}
 
 async function resolvePublisherFields(payload = {}) {
   const tenNXB = typeof payload.tenNXB === "string" ? payload.tenNXB.trim() : "";
@@ -57,6 +72,7 @@ async function resolvePublisherFields(payload = {}) {
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getBooks = async (req, res) => {
   try {
+    await ensureBookCodes();
     const { q, page = 1, limit = 12 } = req.query;
     const filter = {};
 
@@ -94,6 +110,7 @@ exports.getBooks = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 exports.getBookById = async (req, res) => {
   try {
+    await ensureBookCodes();
     const book = await Book.findById(req.params.id).populate(
       "nxb",
       "tenNXB diaChi",
@@ -114,7 +131,10 @@ exports.getBookById = async (req, res) => {
 exports.createBook = async (req, res) => {
   try {
     const bookPayload = await resolvePublisherFields(req.body);
-    const book = await Book.create(bookPayload);
+    const book = await Book.create({
+      ...bookPayload,
+      maSach: await generateNextBookCode(),
+    });
     await book.populate("nxb", "maNXB tenNXB diaChi");
     return res.status(201).json({ success: true, data: book });
   } catch (err) {
@@ -127,20 +147,25 @@ exports.createBook = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 exports.updateBook = async (req, res) => {
   try {
+    const currentBook = await Book.findById(req.params.id);
+    if (!currentBook)
+      return res
+        .status(404)
+        .json({ success: false, message: "Sách không tồn tại." });
+
     const bookPayload = await resolvePublisherFields(req.body);
     const book = await Book.findByIdAndUpdate(
       req.params.id,
-      bookPayload,
+      {
+        ...bookPayload,
+        // Mã sách là định danh hệ thống, không cho sửa thủ công.
+        maSach: currentBook.maSach || (await generateNextBookCode()),
+      },
       {
         new: true, // Trả về document đã cập nhật
         runValidators: true,
       },
     ).populate("nxb", "maNXB tenNXB diaChi");
-
-    if (!book)
-      return res
-        .status(404)
-        .json({ success: false, message: "Sách không tồn tại." });
     return res.json({ success: true, data: book });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
