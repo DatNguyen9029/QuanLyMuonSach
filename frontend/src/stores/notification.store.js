@@ -3,11 +3,21 @@ import { ref, computed } from "vue";
 import api from "@/services/api";
 
 export const useNotificationStore = defineStore("notification", () => {
+  const MAX_TOAST_QUEUE = 5;
+
   const notifications = ref([]);
   const unreadCount = ref(0);
   const isLoading = ref(false);
-  const pagination = ref({ page: 1, limit: 10, total: 0, totalPages: 1 });
+  const pagination = ref({
+    page: 1,
+    limit: 10,
+    total: null,
+    totalPages: null,
+    hasMore: false,
+    nextCursor: null,
+  });
   const toastQueue = ref([]);
+  const toastTimers = new Map();
 
   const socketRef = ref(null);
 
@@ -29,11 +39,20 @@ export const useNotificationStore = defineStore("notification", () => {
   }
 
   function resetPaginationFromResponse(rawPagination = {}) {
+    const currentPage = Number(pagination.value.page || 1);
     pagination.value = {
-      page: Number(rawPagination.page || 1),
+      page: Number(rawPagination.page || currentPage),
       limit: Number(rawPagination.limit || pagination.value.limit || 10),
-      total: Number(rawPagination.total || 0),
-      totalPages: Number(rawPagination.totalPages || 1),
+      total:
+        rawPagination.total === null || rawPagination.total === undefined
+          ? null
+          : Number(rawPagination.total),
+      totalPages:
+        rawPagination.totalPages === null || rawPagination.totalPages === undefined
+          ? null
+          : Number(rawPagination.totalPages),
+      hasMore: Boolean(rawPagination.hasMore),
+      nextCursor: rawPagination.nextCursor || null,
     };
   }
 
@@ -49,16 +68,26 @@ export const useNotificationStore = defineStore("notification", () => {
     notifications.value.unshift(notif);
   }
 
-  async function fetchNotifications({ page = 1, read = null } = {}) {
+  async function fetchNotifications({
+    page = 1,
+    read = null,
+    cursor = null,
+    append = null,
+  } = {}) {
     isLoading.value = true;
     try {
       const params = { page, limit: pagination.value.limit };
       if (read !== null) params.read = read;
+      if (cursor) params.cursor = cursor;
 
       const { data } = await api.get("/notifications", { params });
-      const list = Array.isArray(data?.data) ? data.data.map(normalizeNotification) : [];
+      const list = Array.isArray(data?.data)
+        ? data.data.map(normalizeNotification)
+        : [];
+      const shouldAppend =
+        append === null ? Boolean(cursor || Number(page) > 1) : Boolean(append);
 
-      if (page === 1) {
+      if (!shouldAppend) {
         notifications.value = list;
       } else {
         const seen = new Set(notifications.value.map((n) => n._id));
@@ -161,23 +190,48 @@ export const useNotificationStore = defineStore("notification", () => {
 
   function pushToast(notif, duration = 5000) {
     const normalized = normalizeNotification(notif);
-    const toastId = normalized._id || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const toastId =
+      normalized._id || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
     if (toastQueue.value.some((t) => t.id === toastId)) return;
 
+    while (toastQueue.value.length >= MAX_TOAST_QUEUE) {
+      const dropped = toastQueue.value.shift();
+      if (dropped) {
+        const timerId = toastTimers.get(dropped.id);
+        if (timerId) clearTimeout(timerId);
+        toastTimers.delete(dropped.id);
+      }
+    }
+
     toastQueue.value.push({ ...normalized, id: toastId });
-    setTimeout(() => removeToast(toastId), duration);
+    const timerId = setTimeout(() => removeToast(toastId), duration);
+    toastTimers.set(toastId, timerId);
   }
 
   function removeToast(toastId) {
     toastQueue.value = toastQueue.value.filter((t) => t.id !== toastId);
+    const timerId = toastTimers.get(toastId);
+    if (timerId) clearTimeout(timerId);
+    toastTimers.delete(toastId);
   }
 
   function reset() {
     notifications.value = [];
     unreadCount.value = 0;
     toastQueue.value = [];
-    pagination.value = { page: 1, limit: 10, total: 0, totalPages: 1 };
+    pagination.value = {
+      page: 1,
+      limit: 10,
+      total: null,
+      totalPages: null,
+      hasMore: false,
+      nextCursor: null,
+    };
+    for (const timerId of toastTimers.values()) {
+      clearTimeout(timerId);
+    }
+    toastTimers.clear();
     detachSocketListeners();
   }
 

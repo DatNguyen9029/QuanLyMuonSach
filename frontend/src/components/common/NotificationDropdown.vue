@@ -193,8 +193,7 @@ const displayedNotifications = computed(() => {
 });
 
 const hasMore = computed(() => {
-  const { page, totalPages } = notifStore.pagination;
-  return page < totalPages;
+  return Boolean(notifStore.pagination.hasMore);
 });
 
 // ── Methods ─────────────────────────────────────────────────────────────────
@@ -212,7 +211,7 @@ function closeDropdown() {
 function switchTab(tab) {
   activeTab.value = tab;
   if (tab === "all") {
-    notifStore.fetchNotifications({ page: 1 });
+    notifStore.fetchNotifications({ page: 1, cursor: null, append: false });
   }
 }
 
@@ -240,8 +239,13 @@ async function handleItemClick(notif) {
 }
 
 async function loadMore() {
-  const nextPage = notifStore.pagination.page + 1;
-  await notifStore.fetchNotifications({ page: nextPage });
+  if (!notifStore.pagination.nextCursor) return;
+  const nextPage = Number(notifStore.pagination.page || 1) + 1;
+  await notifStore.fetchNotifications({
+    page: nextPage,
+    cursor: notifStore.pagination.nextCursor,
+    append: true,
+  });
 }
 
 // ── Icon helpers (đồng bộ với NotificationToast) ────────────────────────────

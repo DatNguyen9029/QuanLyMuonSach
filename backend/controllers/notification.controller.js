@@ -3,7 +3,54 @@
  * Quản lý thông báo cá nhân của user (CRUD + stats)
  */
 
+const mongoose = require("mongoose");
 const Notification = require("../models/Notification.model");
+const User = require("../models/User.model");
+
+const MAX_LIMIT = 50;
+
+function parseLimit(rawLimit) {
+  const limit = Number(rawLimit) || 10;
+  return Math.min(MAX_LIMIT, Math.max(1, limit));
+}
+
+function encodeCursor(notification) {
+  if (!notification?.createdAt || !notification?._id) return null;
+  return `${new Date(notification.createdAt).getTime()}_${String(notification._id)}`;
+}
+
+function decodeCursor(rawCursor) {
+  if (!rawCursor || typeof rawCursor !== "string") return null;
+  const [ts, id] = rawCursor.split("_");
+  const timeMs = Number(ts);
+  if (!Number.isFinite(timeMs) || !id || !mongoose.Types.ObjectId.isValid(id)) {
+    return null;
+  }
+  return { createdAt: new Date(timeMs), _id: new mongoose.Types.ObjectId(id) };
+}
+
+async function getCachedUnreadCount(userId) {
+  const user = await User.findById(userId).select("unreadNotificationCount");
+  if (!user) return 0;
+  if (
+    user.unreadNotificationCount === undefined ||
+    user.unreadNotificationCount === null
+  ) {
+    const recount = await Notification.countDocuments({ user: userId, read: false });
+    await User.findByIdAndUpdate(userId, { unreadNotificationCount: recount });
+    return recount;
+  }
+
+  const cached = Number(user.unreadNotificationCount || 0);
+
+  if (Number.isFinite(cached) && cached >= 0) {
+    return cached;
+  }
+
+  const recount = await Notification.countDocuments({ user: userId, read: false });
+  await User.findByIdAndUpdate(userId, { unreadNotificationCount: recount });
+  return recount;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // [USER/ADMIN] GET /api/notifications - Lấy danh sách thông báo (phân trang)
@@ -11,31 +58,52 @@ const Notification = require("../models/Notification.model");
 exports.getUserNotifications = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { page = 1, limit = 10, read = null } = req.query; // read: null=all, true=read, false=unread
+    const { read = null, cursor = null, page = 1 } = req.query;
+    const limit = parseLimit(req.query.limit); // read: null=all, true=read, false=unread
 
     const filter = { user: userId };
     if (read !== null) filter.read = read === "true";
 
-    const notifications = await Notification.find(filter)
-      .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit))
+    const decodedCursor = decodeCursor(cursor);
+    if (cursor && !decodedCursor) {
+      return res.status(400).json({
+        success: false,
+        message: "Cursor không hợp lệ.",
+      });
+    }
+
+    if (decodedCursor) {
+      filter.$or = [
+        { createdAt: { $lt: decodedCursor.createdAt } },
+        {
+          createdAt: decodedCursor.createdAt,
+          _id: { $lt: decodedCursor._id },
+        },
+      ];
+    }
+
+    const docs = await Notification.find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit + 1)
       .lean();
 
-    const total = await Notification.countDocuments(filter);
-    const unreadCount = await Notification.countDocuments({
-      ...filter,
-      read: false,
-    });
+    const hasMore = docs.length > limit;
+    const notifications = hasMore ? docs.slice(0, limit) : docs;
+    const nextCursor = hasMore
+      ? encodeCursor(notifications[notifications.length - 1])
+      : null;
+    const unreadCount = await getCachedUnreadCount(userId);
 
     return res.json({
       success: true,
       data: notifications,
       pagination: {
         page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / Number(limit)),
+        limit,
+        total: null,
+        totalPages: null,
+        hasMore,
+        nextCursor,
       },
       stats: { unreadCount },
     });
@@ -50,10 +118,7 @@ exports.getUserNotifications = async (req, res) => {
 exports.getUnreadCount = async (req, res) => {
   try {
     const userId = req.user._id;
-    const count = await Notification.countDocuments({
-      user: userId,
-      read: false,
-    });
+    const count = await getCachedUnreadCount(userId);
 
     return res.json({
       success: true,
@@ -72,17 +137,26 @@ exports.markAsRead = async (req, res) => {
     const userId = req.user._id;
     const { id } = req.params;
 
-    const notification = await Notification.findOneAndUpdate(
-      { _id: id, user: userId },
-      { read: true },
-      { new: true },
-    );
+    const notification = await Notification.findOne({ _id: id, user: userId });
 
     if (!notification) {
       return res.status(404).json({
         success: false,
         message: "Thông báo không tồn tại hoặc không thuộc về bạn.",
       });
+    }
+
+    if (!notification.read) {
+      notification.read = true;
+      await notification.save();
+
+      await User.findByIdAndUpdate(userId, {
+        $inc: { unreadNotificationCount: -1 },
+      });
+      await User.updateOne(
+        { _id: userId, unreadNotificationCount: { $lt: 0 } },
+        { unreadNotificationCount: 0 },
+      );
     }
 
     return res.json({
@@ -105,6 +179,8 @@ exports.markAllAsRead = async (req, res) => {
       { user: userId, read: false },
       { read: true },
     );
+
+    await User.findByIdAndUpdate(userId, { unreadNotificationCount: 0 });
 
     return res.json({
       success: true,
@@ -131,7 +207,19 @@ exports.deleteNotification = async (req, res) => {
 
   try {
     const { id } = req.params;
-    await Notification.findByIdAndDelete(id);
+    const existing = await Notification.findById(id).lean();
+    if (existing) {
+      await Notification.findByIdAndDelete(id);
+      if (!existing.read && existing.user) {
+        await User.findByIdAndUpdate(existing.user, {
+          $inc: { unreadNotificationCount: -1 },
+        });
+        await User.updateOne(
+          { _id: existing.user, unreadNotificationCount: { $lt: 0 } },
+          { unreadNotificationCount: 0 },
+        );
+      }
+    }
 
     return res.json({
       success: true,

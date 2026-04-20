@@ -5,6 +5,7 @@
  */
 
 const mongoose = require("mongoose");
+const NOTIFICATION_TTL_DAYS = 180;
 
 const notificationSchema = new mongoose.Schema(
   {
@@ -54,16 +55,21 @@ const notificationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {},
     },
+    expiresAt: {
+      type: Date,
+      default: () =>
+        new Date(
+          Date.now() + NOTIFICATION_TTL_DAYS * 24 * 60 * 60 * 1000,
+        ),
+      index: true,
+    },
   },
-  {
-    timestamps: true,
-    // Index tối ưu cho query phổ biến
-    indexes: [
-      { user: 1, read: 1, createdAt: -1 }, // Get unread + latest
-      { user: 1, createdAt: -1 }, // User history
-      { read: 1, createdAt: -1 }, // Admin stats
-    ],
-  },
+  { timestamps: true },
 );
+
+notificationSchema.index({ user: 1, read: 1, createdAt: -1 });
+notificationSchema.index({ user: 1, createdAt: -1 });
+notificationSchema.index({ read: 1, createdAt: -1 });
+notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model("Notification", notificationSchema);

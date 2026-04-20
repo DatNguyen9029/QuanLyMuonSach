@@ -11,6 +11,7 @@
  */
 
 const Notification = require("../models/Notification.model");
+const User = require("../models/User.model");
 
 /**
  * Tạo một notification record trong DB và emit Socket.io đến đúng đối tượng.
@@ -48,6 +49,10 @@ async function createAndEmit(io, payload) {
     ...(relatedId && { relatedId }),
     ...(relatedType && { relatedType }),
     data,
+  });
+
+  await User.findByIdAndUpdate(userId, {
+    $inc: { unreadNotificationCount: 1 },
   });
 
   // 2. Xác định room để emit

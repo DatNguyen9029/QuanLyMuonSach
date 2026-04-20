@@ -56,6 +56,11 @@ const userSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    unreadNotificationCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     passwordHash: {
       type: String,
       select: false,

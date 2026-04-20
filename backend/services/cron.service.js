@@ -15,7 +15,9 @@
 
 const cron = require("node-cron");
 const BorrowRecord = require("../models/BorrowRecord.model"); // Điều chỉnh path
+const Notification = require("../models/Notification.model");
 const notifService = require("./notification.service");
+const NOTIFICATION_RETENTION_DAYS = 180;
 
 /**
  * Khởi động tất cả cron jobs.
@@ -28,8 +30,15 @@ function startCronJobs(io) {
     timezone: "Asia/Ho_Chi_Minh", // Quan trọng: đặt timezone VN
   });
 
+  cron.schedule("20 3 * * *", cleanupOldNotifications, {
+    timezone: "Asia/Ho_Chi_Minh",
+  });
+
   console.log(
     "[Cron] Đã đăng ký job nhắc hạn trả sách — chạy lúc 08:00 AM (VN)",
+  );
+  console.log(
+    `[Cron] Đã đăng ký job dọn thông báo cũ — chạy lúc 03:20 AM (VN), giữ ${NOTIFICATION_RETENTION_DAYS} ngày`,
   );
 }
 
@@ -133,4 +142,24 @@ async function runDueDateCheckManually(io) {
   return checkDueDateReminders(io);
 }
 
-module.exports = { startCronJobs, runDueDateCheckManually };
+async function cleanupOldNotifications() {
+  try {
+    const threshold = new Date(
+      Date.now() - NOTIFICATION_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const result = await Notification.deleteMany({
+      createdAt: { $lt: threshold },
+    });
+    console.log(
+      `[Cron] Dọn thông báo cũ hoàn tất — đã xóa ${result.deletedCount} bản ghi`,
+    );
+  } catch (err) {
+    console.error("[Cron] Lỗi dọn thông báo cũ:", err);
+  }
+}
+
+module.exports = {
+  startCronJobs,
+  runDueDateCheckManually,
+  cleanupOldNotifications,
+};
