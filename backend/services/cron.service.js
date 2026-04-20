@@ -16,6 +16,7 @@
 const cron = require("node-cron");
 const BorrowRecord = require("../models/BorrowRecord.model"); // Điều chỉnh path
 const Notification = require("../models/Notification.model");
+const User = require("../models/User.model");
 const notifService = require("./notification.service");
 const NOTIFICATION_RETENTION_DAYS = 180;
 
@@ -33,12 +34,18 @@ function startCronJobs(io) {
   cron.schedule("20 3 * * *", cleanupOldNotifications, {
     timezone: "Asia/Ho_Chi_Minh",
   });
+  cron.schedule("35 3 * * *", reconcileUnreadNotificationCounters, {
+    timezone: "Asia/Ho_Chi_Minh",
+  });
 
   console.log(
     "[Cron] Đã đăng ký job nhắc hạn trả sách — chạy lúc 08:00 AM (VN)",
   );
   console.log(
     `[Cron] Đã đăng ký job dọn thông báo cũ — chạy lúc 03:20 AM (VN), giữ ${NOTIFICATION_RETENTION_DAYS} ngày`,
+  );
+  console.log(
+    "[Cron] Đã đăng ký job đồng bộ unreadNotificationCount — chạy lúc 03:35 AM (VN)",
   );
 }
 
@@ -158,8 +165,37 @@ async function cleanupOldNotifications() {
   }
 }
 
+async function reconcileUnreadNotificationCounters() {
+  try {
+    const stats = await Notification.aggregate([
+      { $match: { read: false } },
+      { $group: { _id: "$user", count: { $sum: 1 } } },
+    ]);
+
+    await User.updateMany({}, { $set: { unreadNotificationCount: 0 } });
+
+    if (stats.length > 0) {
+      await User.bulkWrite(
+        stats.map((item) => ({
+          updateOne: {
+            filter: { _id: item._id },
+            update: { $set: { unreadNotificationCount: Number(item.count || 0) } },
+          },
+        })),
+      );
+    }
+
+    console.log(
+      `[Cron] Đồng bộ unreadNotificationCount hoàn tất — users có unread: ${stats.length}`,
+    );
+  } catch (err) {
+    console.error("[Cron] Lỗi đồng bộ unreadNotificationCount:", err);
+  }
+}
+
 module.exports = {
   startCronJobs,
   runDueDateCheckManually,
   cleanupOldNotifications,
+  reconcileUnreadNotificationCounters,
 };

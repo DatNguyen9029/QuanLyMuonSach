@@ -185,6 +185,7 @@ const router = useRouter();
 
 const isOpen = ref(false);
 const activeTab = ref("all"); // 'all' | 'unread'
+const isAutoLoading = ref(false);
 
 // ── Computed ────────────────────────────────────────────────────────────────
 const displayedNotifications = computed(() => {
@@ -246,6 +247,26 @@ async function loadMore() {
     cursor: notifStore.pagination.nextCursor,
     append: true,
   });
+}
+
+async function onScroll(event) {
+  if (!event?.target || notifStore.isLoading || isAutoLoading.value || !hasMore.value) {
+    return;
+  }
+
+  const target = event.target;
+  const threshold = 64;
+  const nearBottom =
+    target.scrollTop + target.clientHeight >= target.scrollHeight - threshold;
+
+  if (!nearBottom) return;
+
+  isAutoLoading.value = true;
+  try {
+    await loadMore();
+  } finally {
+    isAutoLoading.value = false;
+  }
 }
 
 // ── Icon helpers (đồng bộ với NotificationToast) ────────────────────────────
