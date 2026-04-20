@@ -61,6 +61,9 @@ exports.register = async (req, res) => {
           hoTen: user.hoTen,
           role: user.role,
           avatar: user.avatar,
+          isBlacklisted: user.isBlacklisted,
+          blacklistReason: user.blacklistReason,
+          blacklistedAt: user.blacklistedAt,
         },
       },
     });
@@ -105,6 +108,9 @@ exports.login = async (req, res) => {
           hoTen: user.hoTen,
           role: user.role,
           avatar: user.avatar,
+          isBlacklisted: user.isBlacklisted,
+          blacklistReason: user.blacklistReason,
+          blacklistedAt: user.blacklistedAt,
         },
       },
     });

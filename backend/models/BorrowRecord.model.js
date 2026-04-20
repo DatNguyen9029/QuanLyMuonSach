@@ -52,6 +52,14 @@ const borrowRecordSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    daDenBu: {
+      type: Boolean,
+      default: false,
+    },
+    ngayDenBu: {
+      type: Date,
+      default: null,
+    },
     lyDoTuChoi: {
       type: String,
       trim: true,

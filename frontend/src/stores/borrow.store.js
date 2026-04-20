@@ -65,6 +65,8 @@ export const useBorrowStore = defineStore("borrow", () => {
       fineAmount: Number(
         record.tienPhat || record.tienPhatTamTinh || record.finePreview || 0,
       ),
+      compensated: Boolean(record.daDenBu),
+      compensatedAt: record.ngayDenBu || null,
       rejectReason: record.lyDoTuChoi || "",
       note: record.ghiChu || "",
       displayStatus: record.displayStatus || backendStatus,
@@ -76,6 +78,9 @@ export const useBorrowStore = defineStore("borrow", () => {
             phone: user.dienThoai,
             role: user.role,
             avatar: user.avatar,
+            isBlacklisted: Boolean(user.isBlacklisted),
+            blacklistReason: user.blacklistReason || "",
+            blacklistedAt: user.blacklistedAt || null,
           }
         : null,
       book: book
@@ -207,10 +212,22 @@ export const useBorrowStore = defineStore("borrow", () => {
     return data;
   }
 
-  async function returnBook(borrowId, { markAsLost = false } = {}) {
-    const { data } = await api.patch(`/borrows/${borrowId}/status`, {
+  async function returnBook(
+    borrowId,
+    { markAsLost = false, compensated = false, blacklistReason = "" } = {},
+  ) {
+    const payload = {
       trangThai: markAsLost ? "MatSach" : "DaTra",
-    });
+    };
+
+    if (markAsLost) {
+      payload.daDenBu = Boolean(compensated);
+      if (!payload.daDenBu && blacklistReason?.trim()) {
+        payload.blacklistReason = blacklistReason.trim();
+      }
+    }
+
+    const { data } = await api.patch(`/borrows/${borrowId}/status`, payload);
     _updateLocalBorrow(borrowId, normalizeBorrow(data.data));
     return data;
   }

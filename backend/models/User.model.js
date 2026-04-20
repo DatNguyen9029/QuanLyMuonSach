@@ -37,6 +37,25 @@ const userSchema = new mongoose.Schema(
     diaChi: { type: String, trim: true },
     dienThoai: { type: String, trim: true },
     avatar: { type: String }, // URL ảnh từ Google
+    isBlacklisted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    blacklistReason: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    blacklistedAt: {
+      type: Date,
+      default: null,
+    },
+    blacklistedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     passwordHash: {
       type: String,
       select: false,

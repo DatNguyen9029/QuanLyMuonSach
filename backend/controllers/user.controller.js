@@ -86,6 +86,8 @@ exports.update = async (req, res) => {
       diaChi,
       role,
       password,
+      isBlacklisted,
+      blacklistReason,
     } = req.body;
 
     const updateData = {
@@ -101,6 +103,20 @@ exports.update = async (req, res) => {
 
     if (password) {
       updateData.passwordHash = hashPassword(password);
+    }
+
+    if (isBlacklisted === true) {
+      updateData.isBlacklisted = true;
+      updateData.blacklistedAt = new Date();
+      updateData.blacklistedBy = req.user?._id || null;
+      updateData.blacklistReason = String(blacklistReason || "")
+        .trim()
+        .slice(0, 500);
+    } else if (isBlacklisted === false) {
+      updateData.isBlacklisted = false;
+      updateData.blacklistedAt = null;
+      updateData.blacklistedBy = null;
+      updateData.blacklistReason = "";
     }
 
     Object.keys(updateData).forEach((key) => {

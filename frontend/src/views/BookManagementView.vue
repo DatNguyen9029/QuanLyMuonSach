@@ -224,7 +224,12 @@
                   <button
                     @click="openBorrowModal(book)"
                     class="btn btn-primary text-xs"
-                    :disabled="book.soLuongTienTai <= 0"
+                    :disabled="book.soLuongTienTai <= 0 || isCurrentUserBlacklisted"
+                    :title="
+                      isCurrentUserBlacklisted
+                        ? 'Tài khoản đang bị blacklist, không thể mượn sách'
+                        : ''
+                    "
                   >
                     <svg
                       class="w-4 h-4 inline-block mr-1"
@@ -267,6 +272,8 @@
       v-if="showBorrowModal"
       :show="showBorrowModal"
       :book="selectedBook"
+      :is-blacklisted="isCurrentUserBlacklisted"
+      :blacklist-reason="authStore.user?.blacklistReason || ''"
       @close="closeBorrowModal"
       @submit="handleBorrowSubmit"
     />
@@ -301,6 +308,9 @@ const selectedBook = ref(null);
 const brokenImageIds = ref(new Set());
 
 const pageTitle = computed(() => (authStore.isAdmin ? "Quản lý Sách" : "Sách"));
+const isCurrentUserBlacklisted = computed(
+  () => !authStore.isAdmin && Boolean(authStore.user?.isBlacklisted),
+);
 const pageDescription = computed(() =>
   authStore.isAdmin
     ? "Quản lý danh sách sách trong thư viện"
@@ -387,6 +397,12 @@ const deleteBook = async (bookId) => {
 
 // Borrow modal functions
 const openBorrowModal = (book) => {
+  if (isCurrentUserBlacklisted.value) {
+    alert(
+      "Tài khoản của bạn đang bị blacklist do vi phạm mượn sách, không thể tạo phiếu mượn mới.",
+    );
+    return;
+  }
   selectedBook.value = book;
   showBorrowModal.value = true;
 };

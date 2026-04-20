@@ -13,6 +13,9 @@ export const useReaderStore = defineStore("reader", () => {
     phai: reader.phai || "",
     diaChi: reader.diaChi || "",
     role: reader.role || "user",
+    isBlacklisted: Boolean(reader.isBlacklisted),
+    blacklistReason: reader.blacklistReason || "",
+    blacklistedAt: reader.blacklistedAt || null,
     createdAt: reader.createdAt,
   });
 
@@ -87,6 +90,17 @@ export const useReaderStore = defineStore("reader", () => {
     }
   };
 
+  const setBlacklistStatus = async (
+    readerId,
+    { isBlacklisted, blacklistReason = "" } = {},
+  ) => {
+    const payload = {
+      isBlacklisted: Boolean(isBlacklisted),
+      blacklistReason: String(blacklistReason || "").trim(),
+    };
+    return updateReader(readerId, payload);
+  };
+
   return {
     readers,
     isLoading,
@@ -96,5 +110,6 @@ export const useReaderStore = defineStore("reader", () => {
     createReader,
     updateReader,
     deleteReader,
+    setBlacklistStatus,
   };
 });

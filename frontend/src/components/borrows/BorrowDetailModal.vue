@@ -65,8 +65,20 @@
       </div>
 
       <div v-if="borrow?.fineAmount > 0">
-        <label class="form-label">Tiền phạt</label>
-        <p class="form-control bg-yellow-50 text-yellow-800">
+        <label class="form-label">
+          Tiền phạt
+          <template v-if="borrow?.backendStatus === 'MatSach'">
+            -> {{ borrow?.compensated ? "Đã đóng" : "Chưa đóng" }}
+          </template>
+        </label>
+        <p
+          class="form-control"
+          :class="
+            borrow?.backendStatus === 'MatSach' && !borrow?.compensated
+              ? 'bg-red-50 text-red-700'
+              : 'bg-yellow-50 text-yellow-800'
+          "
+        >
           {{ formatCurrency(borrow.fineAmount) }}
         </p>
       </div>

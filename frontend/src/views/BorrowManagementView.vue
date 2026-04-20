@@ -402,8 +402,10 @@
                       v-for="reader in availableReaders"
                       :key="reader._id"
                       :value="reader._id"
+                      :disabled="reader.isBlacklisted"
                     >
                       {{ reader.hoTen }} - {{ reader.email }}
+                      {{ reader.isBlacklisted ? " (Đang blacklist)" : "" }}
                     </option>
                   </select>
                   <span v-if="createBorrowErrors.userId" class="form-error">
@@ -415,6 +417,9 @@
                       getReaderActiveBorrowCount(newBorrowForm.userId)
                     }}</strong>
                     sách chờ duyệt/đang mượn.
+                  </p>
+                  <p v-if="selectedReaderIsBlacklisted" class="form-error">
+                    Độc giả đang bị blacklist nên không thể tạo phiếu mượn mới.
                   </p>
                 </div>
 
@@ -664,7 +669,12 @@
                   <strong>{{ formatDate(selectedBorrow.returnedDate) }}</strong>
                 </div>
                 <div v-if="selectedBorrow.fineAmount > 0" class="detail-card">
-                  <span class="detail-label">Tiền phạt</span>
+                  <span class="detail-label">
+                    Tiền phạt
+                    <template v-if="selectedBorrow.backendStatus === 'MatSach'">
+                      -> {{ selectedBorrow.compensated ? "Đã đóng" : "Chưa đóng" }}
+                    </template>
+                  </span>
                   <strong>{{
                     formatCurrency(selectedBorrow.fineAmount)
                   }}</strong>
@@ -929,6 +939,49 @@
                       formatCurrency(lostFine)
                     }}</span>
                   </div>
+                  <div class="loss-policy-box">
+                    <label class="input-label">Tình trạng đền bù</label>
+                    <div class="fine-type-selector">
+                      <label
+                        class="fine-option"
+                        :class="{
+                          'fine-option--active': returnForm.compensated,
+                        }"
+                      >
+                        <input
+                          type="radio"
+                          :value="true"
+                          v-model="returnForm.compensated"
+                        />
+                        <div>
+                          <span class="fine-option-label"
+                            >Độc giả đã đền bù</span
+                          >
+                        </div>
+                      </label>
+                      <label
+                        class="fine-option"
+                        :class="{
+                          'fine-option--active': !returnForm.compensated,
+                        }"
+                      >
+                        <input
+                          type="radio"
+                          :value="false"
+                          v-model="returnForm.compensated"
+                        />
+                        <div>
+                          <span class="fine-option-label"
+                            >Chưa đền bù (đưa vào blacklist)</span
+                          >
+                        </div>
+                      </label>
+                    </div>
+                    <p v-if="!returnForm.compensated" class="loss-policy-warn">
+                      Độc giả chưa đền bù sẽ bị thêm vào blacklist và không thể
+                      mượn sách nữa.
+                    </p>
+                  </div>
                 </div>
 
                 <div
@@ -966,7 +1019,11 @@
                   v-if="returnForm.fineType === 'lost'"
                   class="text-xs text-red-200 mt-2"
                 >
-                  Hệ thống sẽ ghi nhận phiếu mượn ở trạng thái mất sách.
+                  {{
+                    returnForm.compensated
+                      ? "Hệ thống sẽ ghi nhận phiếu mất sách và đã đền bù."
+                      : "Hệ thống sẽ ghi nhận phiếu mất sách và đưa độc giả vào blacklist."
+                  }}
                 </p>
               </div>
             </div>
@@ -1215,6 +1272,7 @@ const newBorrowForm = reactive({
 
 const returnForm = reactive({
   fineType: "late",
+  compensated: true,
   note: "",
 });
 
@@ -1570,6 +1628,7 @@ function openRejectModal(borrow) {
 function openReturnModal(borrow) {
   selectedBorrow.value = borrow;
   returnForm.fineType = borrow.status === "overdue" ? "late" : "none";
+  returnForm.compensated = true;
   returnForm.note = "";
   showReturnModal.value = true;
 }
@@ -1641,6 +1700,11 @@ async function confirmReturn() {
   try {
     await borrowStore.returnBook(selectedBorrow.value._id, {
       markAsLost: returnForm.fineType === "lost",
+      compensated: returnForm.fineType === "lost" ? returnForm.compensated : false,
+      blacklistReason:
+        returnForm.fineType === "lost" && !returnForm.compensated
+          ? returnForm.note
+          : "",
     });
     showToast("Đã cập nhật trạng thái trả sách.", "success");
     showReturnModal.value = false;
@@ -1755,6 +1819,10 @@ function validateCreateBorrowForm() {
 
   if (!newBorrowForm.userId)
     createBorrowErrors.userId = "Vui lòng chọn bạn đọc.";
+  if (selectedReaderIsBlacklisted.value) {
+    createBorrowErrors.userId =
+      "Bạn đọc đang bị blacklist, không thể tạo phiếu mượn.";
+  }
   if (!newBorrowForm.borrowDate)
     createBorrowErrors.borrowDate = "Vui lòng chọn ngày mượn.";
   if (!newBorrowForm.dueDate)
@@ -1886,6 +1954,13 @@ function getNewDueDate() {
 }
 
 const fineRatePerDay = computed(() => FINE_RATE_PER_DAY);
+const selectedReaderIsBlacklisted = computed(() => {
+  if (!newBorrowForm.userId) return false;
+  const reader = availableReaders.value.find(
+    (item) => String(item._id) === String(newBorrowForm.userId),
+  );
+  return Boolean(reader?.isBlacklisted);
+});
 
 const computedOverdueDays = computed(() => {
   if (!selectedBorrow.value?.dueDate) return 0;
@@ -3073,6 +3148,19 @@ defineExpose({
 .fine-detail-box--success {
   background: #f0fdf4;
   color: #166534;
+}
+
+.loss-policy-box {
+  margin-top: 12px;
+  border-top: 1px dashed #e5e7eb;
+  padding-top: 12px;
+}
+
+.loss-policy-warn {
+  margin-top: 8px;
+  color: #b91c1c;
+  font-size: 0.83rem;
+  font-weight: 600;
 }
 
 .fine-row {

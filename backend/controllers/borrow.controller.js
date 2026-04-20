@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const BorrowRecord = require("../models/BorrowRecord.model");
 const Book = require("../models/Book.model");
 const User = require("../models/User.model");
-const Notification = require("../models/Notification.model");
+//const Notification = require("../models/Notification.model");
 const { getIO } = require("../socket");
 const notifService = require("../services/notification.service");
 
@@ -19,7 +19,11 @@ const MAX_BORROW_LIMIT = 3;
 const FINE_PER_DAY = 10000;
 
 const BORROW_POPULATE = [
-  { path: "user", select: "hoTen email dienThoai role avatar" },
+  {
+    path: "user",
+    select:
+      "hoTen email dienThoai role avatar isBlacklisted blacklistReason blacklistedAt",
+  },
   {
     path: "book",
     select: "tenSach tacGia hinhAnh donGia soLuongTienTai tenNXB",
@@ -32,6 +36,16 @@ function isAdmin(req) {
 
 function isReader(req) {
   return req.user?.role === "user";
+}
+
+function parseBoolean(value, defaultValue = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return defaultValue;
 }
 
 function normalizeDateOnly(d) {
@@ -78,6 +92,8 @@ function toClientBorrow(record) {
     ...obj,
     isOverdue,
     overdueDays,
+    daDenBu: Boolean(obj.daDenBu),
+    ngayDenBu: obj.ngayDenBu || null,
     displayStatus: isOverdue ? "QuaHan" : obj.trangThai,
     tienPhatTamTinh:
       obj.trangThai === BORROW_STATUS.BORROWING
@@ -113,6 +129,14 @@ exports.createBorrowRequest = async (req, res) => {
 
     const { bookId, ngayHenTra, ghiChu = "" } = req.body;
     const userId = req.user._id;
+
+    if (req.user?.isBlacklisted) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Tài khoản của bạn đang nằm trong danh sách blacklist, không thể mượn sách.",
+      });
+    }
 
     if (!bookId || !ngayHenTra) {
       return res.status(400).json({
@@ -240,7 +264,9 @@ exports.createBorrowByAdmin = async (req, res) => {
       });
     }
 
-    const reader = await User.findById(userId).select("role hoTen");
+    const reader = await User.findById(userId).select(
+      "role hoTen isBlacklisted",
+    );
     if (!reader) {
       return res
         .status(404)
@@ -251,6 +277,14 @@ exports.createBorrowByAdmin = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Chỉ có thể tạo phiếu mượn cho tài khoản bạn đọc.",
+      });
+    }
+
+    if (reader.isBlacklisted) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Bạn đọc đang nằm trong blacklist do vi phạm, không thể tạo phiếu mượn mới.",
       });
     }
 
@@ -392,7 +426,8 @@ exports.updateBorrowStatus = async (req, res) => {
     }
 
     const { id } = req.params;
-    const { trangThai, lyDoTuChoi = "" } = req.body;
+    const { trangThai, lyDoTuChoi = "", daDenBu, blacklistReason = "" } =
+      req.body;
 
     if (
       ![
@@ -416,6 +451,14 @@ exports.updateBorrowStatus = async (req, res) => {
     }
 
     const currentStatus = record.trangThai;
+    const borrowUser = await User.findById(record.user).select(
+      "hoTen email isBlacklisted",
+    );
+    if (!borrowUser) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Bạn đọc của phiếu mượn không tồn tại." });
+    }
 
     if (currentStatus === trangThai) {
       await record.populate(BORROW_POPULATE);
@@ -428,6 +471,14 @@ exports.updateBorrowStatus = async (req, res) => {
         return res.status(400).json({
           success: false,
           message: "Chỉ có thể duyệt phiếu đang chờ duyệt.",
+        });
+      }
+
+      if (borrowUser.isBlacklisted) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Bạn đọc đang nằm trong blacklist, không thể duyệt cho mượn sách.",
         });
       }
 
@@ -445,6 +496,8 @@ exports.updateBorrowStatus = async (req, res) => {
 
       record.lyDoTuChoi = "";
       record.ngayTraThucTe = null;
+      record.daDenBu = false;
+      record.ngayDenBu = null;
     }
 
     if (trangThai === BORROW_STATUS.REJECTED) {
@@ -476,6 +529,8 @@ exports.updateBorrowStatus = async (req, res) => {
       });
 
       record.lyDoTuChoi = "";
+      record.daDenBu = false;
+      record.ngayDenBu = null;
     }
 
     if (trangThai === BORROW_STATUS.LOST) {
@@ -486,9 +541,26 @@ exports.updateBorrowStatus = async (req, res) => {
         });
       }
 
+      const compensated = parseBoolean(daDenBu, false);
       record.ngayTraThucTe = new Date();
       record.tienPhat = Number(record.book.donGia || 0);
       record.lyDoTuChoi = "";
+      record.daDenBu = compensated;
+      record.ngayDenBu = compensated ? new Date() : null;
+
+      if (!compensated) {
+        const reason = String(blacklistReason || "")
+          .trim()
+          .slice(0, 500);
+        await User.findByIdAndUpdate(record.user, {
+          isBlacklisted: true,
+          blacklistReason:
+            reason ||
+            "Mất sách nhưng chưa đền bù theo quy định của thư viện.",
+          blacklistedAt: new Date(),
+          blacklistedBy: req.user?._id || null,
+        });
+      }
     }
 
     record.trangThai = trangThai;
@@ -512,7 +584,9 @@ exports.updateBorrowStatus = async (req, res) => {
         notifMessage = `Sách "${record.book.tenSach}" đã được xác nhận trả${record.tienPhat > 0 ? `. Tiền phạt: ${record.tienPhat.toLocaleString("vi-VN")}đ` : ""}.`;
       } else if (trangThai === BORROW_STATUS.LOST) {
         notifTitle = "Thông báo mất sách";
-        notifMessage = `Sách "${record.book.tenSach}" trong phiếu mượn của bạn đã được xác nhận là mất. Tiền phạt: ${record.tienPhat.toLocaleString("vi-VN")}đ. Vui lòng liên hệ thư viện.`;
+        notifMessage = record.daDenBu
+          ? `Sách "${record.book.tenSach}" đã được xác nhận mất và đã ghi nhận đền bù ${record.tienPhat.toLocaleString("vi-VN")}đ.`
+          : `Sách "${record.book.tenSach}" đã được xác nhận mất. Bạn chưa đền bù ${record.tienPhat.toLocaleString("vi-VN")}đ nên tài khoản đã bị đưa vào blacklist.`;
       }
 
       await notifService.createAndEmit(io, {
@@ -525,6 +599,7 @@ exports.updateBorrowStatus = async (req, res) => {
         data: {
           trangThai: record.trangThai,
           tienPhat: record.tienPhat,
+          daDenBu: record.daDenBu,
           bookTitle: record.book.tenSach,
         },
       });
@@ -597,7 +672,10 @@ exports.extendBorrow = async (req, res) => {
 exports.getBorrowDetail = async (req, res) => {
   try {
     const record = await BorrowRecord.findById(req.params.id)
-      .populate("user", "hoTen email dienThoai role avatar")
+      .populate(
+        "user",
+        "hoTen email dienThoai role avatar isBlacklisted blacklistReason blacklistedAt",
+      )
       .populate("book", "tenSach donGia tacGia hinhAnh tenNXB");
 
     if (!record) {
@@ -663,7 +741,10 @@ exports.getAllBorrows = async (req, res) => {
     const limitNum = Math.max(1, Number(limit) || 10);
 
     let query = BorrowRecord.find(filter)
-      .populate("user", "hoTen email dienThoai role avatar")
+      .populate(
+        "user",
+        "hoTen email dienThoai role avatar isBlacklisted blacklistReason blacklistedAt",
+      )
       .populate("book", "tenSach tacGia hinhAnh donGia soLuongTienTai tenNXB")
       .sort({ createdAt: -1 });
 
@@ -695,7 +776,10 @@ exports.getAllBorrows = async (req, res) => {
 exports.getMyBorrows = async (req, res) => {
   try {
     const records = await BorrowRecord.find({ user: req.user._id })
-      .populate("user", "hoTen email dienThoai role avatar")
+      .populate(
+        "user",
+        "hoTen email dienThoai role avatar isBlacklisted blacklistReason blacklistedAt",
+      )
       .populate("book", "tenSach tacGia hinhAnh donGia soLuongTienTai tenNXB")
       .sort({ createdAt: -1 });
 

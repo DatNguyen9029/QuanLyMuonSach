@@ -118,7 +118,7 @@
           v-model="form.email"
           type="email"
           required
-          placeholder="admin@happylibrary.vn"
+          placeholder="abcd@gmail.com"
           class="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 bg-white"
         />
       </div>

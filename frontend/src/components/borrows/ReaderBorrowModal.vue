@@ -108,6 +108,27 @@
                   lý khi có sách trả lại.
                 </span>
               </div>
+              <div v-if="isBlacklisted" class="alert alert-warning">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                  />
+                </svg>
+                <span>
+                  Tài khoản của bạn đang nằm trong blacklist nên không thể gửi
+                  yêu cầu mượn sách.
+                </span>
+              </div>
+              <div v-if="isBlacklisted && blacklistReason" class="alert alert-warning">
+                <span><strong>Lý do:</strong> {{ blacklistReason }}</span>
+              </div>
 
               <!-- Action buttons -->
               <div class="modal-actions">
@@ -122,7 +143,7 @@
                 <button
                   type="submit"
                   class="btn btn-primary"
-                  :disabled="isSubmitting || !isFormValid"
+                  :disabled="isSubmitting || !isFormValid || isBlacklisted"
                 >
                   <span v-if="isSubmitting" class="btn-loading">
                     <svg class="animate-spin" viewBox="0 0 24 24">
@@ -165,6 +186,14 @@ const props = defineProps({
     type: Object,
     required: true,
   },
+  isBlacklisted: {
+    type: Boolean,
+    default: false,
+  },
+  blacklistReason: {
+    type: String,
+    default: "",
+  },
 });
 
 const emit = defineEmits(["close", "submit"]);
@@ -190,7 +219,7 @@ const maxDueDate = computed(() => {
 });
 
 const isFormValid = computed(() => {
-  return formData.value.ngayHenTra !== "";
+  return formData.value.ngayHenTra !== "" && !props.isBlacklisted;
 });
 
 // Reset form khi modal đóng
